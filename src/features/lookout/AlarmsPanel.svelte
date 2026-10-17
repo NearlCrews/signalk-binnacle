@@ -257,6 +257,17 @@ async function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): Promise<v
     delete pendingActions.all;
   }
 }
+// Whether any alert in the list shows an action or its done word, so the rows reserve their two
+// action slots only when there is something to put in them.
+const listHasActions = $derived(
+  alerts.some(
+    (n) =>
+      n.silenced ||
+      n.acknowledged ||
+      (onSilence !== undefined && canSilenceNotification(n)) ||
+      (onAcknowledge !== undefined && canAcknowledgeNotification(n)),
+  ),
+);
 </script>
 
 <SlideOver title="Alarms" closeLabel="Close alarms panel" {onClose} {onBack} bodyFlex>
@@ -280,7 +291,7 @@ async function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): Promise<v
     Silence stops the sound boat-wide. Acknowledge marks an alert as seen; the condition stays
     active until its source resolves it. Tune the collision warning below.
   </p>
-  <section class="panel-section" aria-label="Active alerts">
+  <section class="panel-section alert-list" aria-label="Active alerts">
     <h3 class="caps-label">Active alerts</h3>
     {#if (onSilenceAll && silenceableCount > 1) || (onAcknowledgeAll && acknowledgeableCount > 1)}
       <div class="bulk-actions">
@@ -325,36 +336,46 @@ async function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): Promise<v
             <span class="alert-time muted-note">{time}</span>
           {/if}
         </div>
-        <div class="alert-actions">
-          {#if n.silenced}
-            <span class="flag-tag muted-note">Silenced</span>
-          {:else if onSilence && canSilenceNotification(n)}
-            <button
-              type="button"
-              class="btn btn-ghost"
-              title="Stop the sound now"
-              onclick={() => runAction('silence', n)}
-              disabled={auth.writeBlocked || bulkPending || pendingActions[n.path]}
-            >
-              Silence
-            </button>
-          {/if}
-          {#if n.acknowledged}
-            <span class="flag-tag muted-note"
-              >Acknowledged{acknowledgedTime ? ` ${acknowledgedTime}` : ''}</span
-            >
-          {:else if onAcknowledge && canAcknowledgeNotification(n)}
-            <button
-              type="button"
-              class="btn btn-ghost"
-              title="Mark as seen without resolving the condition"
-              onclick={() => runAction('acknowledge', n)}
-              disabled={auth.writeBlocked || bulkPending || pendingActions[n.path]}
-            >
-              Acknowledge
-            </button>
-          {/if}
-        </div>
+        <!-- Two fixed slots, Silence then Acknowledge, whenever any alert in the list offers an
+             action: a done action leaves its word in its own slot and one the alert does not offer
+             leaves its slot empty, so every row's actions sit on the same two columns down the list.
+             A list with no action anywhere carries no empty action row. -->
+        {#if listHasActions}
+          <div class="alert-actions">
+            {#if n.silenced}
+              <span class="flag-tag muted-note">Silenced</span>
+            {:else if onSilence && canSilenceNotification(n)}
+              <button
+                type="button"
+                class="btn btn-ghost"
+                title="Stop the sound now"
+                onclick={() => runAction('silence', n)}
+                disabled={auth.writeBlocked || bulkPending || pendingActions[n.path]}
+              >
+                Silence
+              </button>
+            {:else}
+              <span class="slot-empty" aria-hidden="true"></span>
+            {/if}
+            {#if n.acknowledged}
+              <span class="flag-tag muted-note"
+                >Acknowledged{acknowledgedTime ? ` ${acknowledgedTime}` : ''}</span
+              >
+            {:else if onAcknowledge && canAcknowledgeNotification(n)}
+              <button
+                type="button"
+                class="btn btn-ghost"
+                title="Mark as seen without resolving the condition"
+                onclick={() => runAction('acknowledge', n)}
+                disabled={auth.writeBlocked || bulkPending || pendingActions[n.path]}
+              >
+                Acknowledge
+              </button>
+            {:else}
+              <span class="slot-empty" aria-hidden="true"></span>
+            {/if}
+          </div>
+        {/if}
       </div>
     {:else}
       <p class="muted-note">
@@ -696,31 +717,51 @@ async function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): Promise<v
   gap: var(--space-2);
   align-self: flex-start;
 }
-/* The border, radius, and raised fill come from the shared .card-frame; only the row layout is here. */
+/* The border, radius, and raised fill come from the shared .card-frame; only the row layout is here.
+   Every alert row sets the same columns: a fixed badge column, the message, and two equal action
+   slots, so the grade, the words, and the actions each stack in one column down the list. */
 .alert-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
 }
+.alert-row > .badge {
+  justify-self: start;
+}
 .alert-main {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: 0.1rem;
-  /* A real floor, not zero: the row wraps, so when the action buttons crowd a long message the
-     actions drop to the next line instead of squeezing the text into a one-word column. */
-  min-inline-size: 12rem;
 }
 .alert-message {
   overflow-wrap: anywhere;
 }
 .alert-actions {
-  display: flex;
-  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 7.5rem);
   align-items: center;
+  justify-items: stretch;
   gap: var(--space-1);
+}
+.alert-actions .flag-tag {
+  text-align: center;
+}
+.alert-actions .slot-empty {
+  min-block-size: var(--control-size);
+}
+/* The alert list is the size container its rows ask about. */
+.alert-list {
+  container-type: inline-size;
+}
+/* In a narrow panel the two action slots take their own row beneath the message, still two equal
+   columns, rather than squeezing the message into a one-word column. */
+@container (max-width: 26rem) {
+  .alert-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .alert-time,
 .flag-tag {

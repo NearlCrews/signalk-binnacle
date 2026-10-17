@@ -510,10 +510,10 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   nav strip's XTE is a double cell that holds its deviation track and steer cue whether or not the
   boat is off track. `.actions` clusters a tool strip's trailing buttons. An alarm
   strip's safety actions are an `.action-group` instead: equal buttons sized to the widest label,
-  each holding its slot for the life of the strip. A done action leaves its word in its own slot
-  (Acknowledged, Silenced, Muted here), an action that does not apply right now leaves its slot
-  empty (`.slot-empty`), and acknowledging never removes the strip's other actions (Raise anchor,
-  Mute, Cancel stay where they were), so nothing slides under the thumb. An armed confirm reserves
+  one slot for each action the alarm offers, which holds its place once used. A done action leaves
+  its word in its own slot (Acknowledged, Silenced, Muted here), a slot whose action stops applying
+  mid-alarm stays as an empty `.slot-empty`, and acknowledging never removes the strip's other
+  actions (Raise anchor, Mute, Cancel stay where they were), so nothing slides under the thumb. An armed confirm reserves
   its other label's width with `.label-reserve` and `data-reserve`, so arming changes only the
   words. On a phone the group takes its own full-width row of equal cells. `.actions--safety`
   widens the gutter between paired safety buttons so a wrong tap in a seaway is less likely.

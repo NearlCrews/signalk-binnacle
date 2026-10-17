@@ -232,19 +232,27 @@ describe('AlarmStrip actions', () => {
     );
   });
 
-  // Four fixed slots for the life of the strip: an action that does not apply leaves its slot
-  // empty and a done one leaves its word, so Open Alarms never slides under the thumb.
-  it('keeps four action slots whatever the alarm offers', () => {
+  // Silencing turns its button into its word in the same slot and holds the sound slot, so
+  // Acknowledge and Open Alarms keep their places under the thumb.
+  it('keeps every action in its place when the alarm is silenced', () => {
     const slots = (body: string) =>
-      (
-        body.match(
-          /<(button|span) [^>]*class="(btn btn-pill btn-strip|note ack-tag|slot-empty)/g,
-        ) ?? []
-      ).length;
-    expect(slots(renderStrip())).toBe(4);
-    expect(slots(renderStrip({ writeBlocked: true, sounding: false }))).toBe(4);
-    const silenced = renderStrip({ notifications: [alert({ silenced: true })], sounding: false });
-    expect(slots(silenced)).toBe(4);
-    expect(silenced.indexOf('>Silenced<')).toBeLessThan(silenced.indexOf('Open Alarms'));
+      body.match(/<(button|span) [^>]*class="(btn btn-pill btn-strip|note ack-tag|slot-empty)/g) ??
+      [];
+    const offered = alert({ canSilence: true, canAcknowledge: true });
+    const before = renderStrip({
+      notifications: [offered],
+      onSilence: () => {},
+      onAcknowledge: () => {},
+    });
+    const after = renderStrip({
+      notifications: [{ ...offered, silenced: true }],
+      sounding: false,
+      onSilence: () => {},
+      onAcknowledge: () => {},
+    });
+    expect(slots(after)).toHaveLength(slots(before).length);
+    expect(after.indexOf('>Silenced<')).toBeLessThan(after.indexOf('Acknowledge'));
+    // No slot for an action this alarm never offers.
+    expect(renderStrip({ writeBlocked: true })).not.toContain('slot-empty');
   });
 });
