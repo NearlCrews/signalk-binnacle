@@ -235,12 +235,12 @@ $effect(() => {
   {#if isFacetGroup}
     <!-- A facet group: one handle moves the whole group, the parent and child toggles share one
          aligned column, and the tune control sits on the parent line. -->
-    <div class="facet-row">
+    <div class="facet-row reorder-line">
       {#if draggable}
         <span class="lead">{@render dragHandle()}</span>
       {/if}
       <div class="facet-stack">
-        <div class="facet-line">
+        <div class="facet-line reorder-line">
           <LayerToggle
             label={item.title}
             description={item.description}
@@ -255,7 +255,7 @@ $effect(() => {
         {#each subLayers as sub (sub.id)}
           {@const subUnavailableId = `layer-${sub.id}-unavailable`}
           <div
-            class="facet-line facet-child"
+            class="facet-line reorder-line facet-child"
             class:unavailable={!sub.available}
             title={sub.available ? undefined : sub.unavailableHint}
           >
@@ -276,7 +276,7 @@ $effect(() => {
       </div>
     </div>
   {:else}
-    <div class="row-main">
+    <div class="row-main reorder-line">
       {#if draggable}
         <span class="lead">{@render dragHandle()}</span>
       {/if}
@@ -303,9 +303,6 @@ $effect(() => {
    from the shared .reorder-row. Only the layer-specific states stay here. */
 .row-main,
 .facet-line {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   min-block-size: var(--control-size);
 }
 /* The lead rail reserves the handle's width so rows never reflow when the quiet handle lifts on hover.
@@ -355,9 +352,7 @@ $effect(() => {
 /* A facet group: the handle is a left gutter top-aligned with the first facet, the facets stack to its
    right so every toggle's checkbox shares one left edge, and a child facet is inset under its parent. */
 .facet-row {
-  display: flex;
   align-items: flex-start;
-  gap: var(--space-2);
   min-block-size: var(--control-size);
 }
 .facet-row .lead {

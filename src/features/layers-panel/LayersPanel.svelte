@@ -374,7 +374,7 @@ const reorder = createLayerReorder(
   align-items: center;
   /* The lock sits where a layer row's grip does: centered in the first control-size slot. */
   padding-inline-start: calc((var(--control-size) - 1.125rem) / 2);
-  inline-size: calc(2 * var(--control-size) + var(--space-2) + var(--switch-width));
+  inline-size: calc(2 * var(--control-size) + var(--space-1) + var(--switch-width));
   flex-shrink: 0;
 }
 .pinned-row :global(.pin-glyph) {

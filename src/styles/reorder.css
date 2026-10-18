@@ -46,9 +46,10 @@
   }
 }
 
-/* One customize line, composed by the instrument and trend customize lists: the toggle grows, then an
-   optional status note, then the grip and its reorder menu inline at the trailing edge, so every row
-   is one line tall and every list shares one gap and one trailing inset. */
+/* One reorderable line, composed by the instrument and trend customize lists and the layer rows: one
+   gap and one trailing inset. A customize row puts its grip and reorder menu at the trailing edge,
+   since its Available rows have none; a layer row leads with them, keeping its trailing rail for the
+   tune and manage controls, and the pinned rows reserve that lead so every title shares one column. */
 .reorder-line {
   display: flex;
   min-inline-size: 0;
