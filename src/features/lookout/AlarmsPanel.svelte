@@ -738,6 +738,10 @@ const listHasActions = $derived(
 .alert-message {
   overflow-wrap: anywhere;
 }
+.alert-time,
+.flag-tag {
+  flex-shrink: 0;
+}
 .alert-actions {
   display: grid;
   grid-template-columns: repeat(2, 7.5rem);
@@ -762,10 +766,6 @@ const listHasActions = $derived(
     grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-.alert-time,
-.flag-tag {
-  flex-shrink: 0;
 }
 /* On the shared .btn base; a mute reads as a row, not a centered button. */
 .mute-row {
