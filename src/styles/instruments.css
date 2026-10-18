@@ -48,9 +48,29 @@
   font-size: var(--text-xs);
   margin-inline-start: var(--space-1);
 }
+/* The aux line holds a tile's one supporting item: its stale age, its trend or level drawing, or its
+   secondary note. Every tile reserves it at the tallest drawing's height (the ROT needle), and the
+   label keeps to one line, so the value, label, and badge lines sit at the same heights in every
+   tile of a row, and a tile going stale swaps its drawing for its age without changing shape. */
+.tile-aux {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 1.375rem;
+  max-inline-size: 100%;
+}
 .tile-secondary {
+  overflow: hidden;
   color: var(--text-muted);
   font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tile-label {
+  max-inline-size: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .tile--warning {
   border-color: var(--warning);

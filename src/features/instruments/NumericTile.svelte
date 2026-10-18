@@ -16,8 +16,8 @@ interface Props {
   abbr?: string;
   viz?: TileDef['viz'];
   sparkPoints?: number[];
-  // The retained stale value's age, shown in place of the secondary line while stale, so the
-  // muted numeral carries the fact that makes retention honest.
+  // The retained stale value's age, shown in the aux line in place of the drawing or secondary note
+  // while stale, so the muted numeral carries the fact that makes retention honest.
   staleAgeText?: string;
   onOpen?: () => void;
 }
@@ -60,24 +60,27 @@ const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, s
     <span class="value"><span class="muted-note">{sensorGloss}</span></span>
   {:else}
     <span class="value"
-      ><span class="num">{reading.value}</span><span class="unit">{reading.unit}</span></span
+      ><span class="num">{reading.value}</span> <span class="unit">{reading.unit}</span></span
     >
-    {#if viz === 'battery'}
-      <BatteryBar fraction={reading.siValue} state={zone} />
-    {:else if viz === 'rot'}
-      <RotNeedle radPerSec={reading.siValue} />
-    {:else if sparkPoints}
-      <Sparkline points={sparkPoints} />
-    {/if}
+  {/if}
+  <span class="tile-aux">
     {#if staleAgeText}
       <span class="tile-secondary">{staleAgeText}</span>
-    {:else if reading.secondary}
-      <span class="tile-secondary">{reading.secondary}</span>
+    {:else if reading.state !== 'never'}
+      {#if viz === 'battery'}
+        <BatteryBar fraction={reading.siValue} state={zone} />
+      {:else if viz === 'rot'}
+        <RotNeedle radPerSec={reading.siValue} />
+      {:else if sparkPoints}
+        <Sparkline points={sparkPoints} />
+      {:else if reading.secondary}
+        <span class="tile-secondary">{reading.secondary}</span>
+      {/if}
     {/if}
-  {/if}
+  </span>
   <!-- The abbreviation leads and carries the loud voice: a mariner scans for SOG or HDG, not for
        the long name, which stays as the quiet gloss beside it. -->
-  <span class="caps-label"
+  <span class="caps-label tile-label" title={labelText}
     >{#if abbr}
       <span class="abbr">{abbr}</span>
     {/if}

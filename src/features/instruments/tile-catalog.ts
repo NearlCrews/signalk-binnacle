@@ -17,7 +17,6 @@ import {
   formatLatitude,
   formatLengthOr,
   formatLongitude,
-  formatMetersOrNm,
   formatNmOr,
   formatPercent,
   formatPressureOr,
@@ -25,6 +24,7 @@ import {
   formatTemperatureOr,
   JOULES_PER_KWH,
   lengthUnit,
+  metersOrNmParts,
   PLACEHOLDER,
   pressureUnit,
   RAD_TO_DEG,
@@ -661,15 +661,16 @@ const COURSE_XTE_DEF: TileDef = {
   kind: 'numeric',
   read({ course, units }) {
     if (!course.active) return { state: 'never', value: PLACEHOLDER, unit: '' };
+    const distance = metersOrNmParts(
+      course.crossTrackErrorMeters === undefined
+        ? undefined
+        : Math.abs(course.crossTrackErrorMeters),
+      units.profile,
+    );
     return {
       state: 'live',
-      value: formatMetersOrNm(
-        course.crossTrackErrorMeters === undefined
-          ? undefined
-          : Math.abs(course.crossTrackErrorMeters),
-        units.profile,
-      ),
-      unit: '',
+      value: distance.value,
+      unit: distance.unit,
       siValue: course.crossTrackErrorMeters,
       secondary:
         course.crossTrackErrorMeters === undefined

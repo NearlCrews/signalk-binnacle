@@ -134,14 +134,16 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
         ><span class="angle">{formatSignedAngleOr(reading.angleRad)}</span>
       </span>
     </div>
+  {/if}
+  <span class="tile-aux">
     {#if staleAgeText}
       <span class="tile-secondary">{staleAgeText}</span>
-    {:else if reading.secondary}
+    {:else if reading.state !== 'never' && reading.secondary}
       <span class="tile-secondary">{reading.secondary}</span>
     {/if}
-  {/if}
+  </span>
   <!-- The abbreviation leads and carries the loud voice, matching NumericTile. -->
-  <span class="caps-label"
+  <span class="caps-label tile-label" title={labelText}
     >{#if abbr}
       <span class="abbr">{abbr}</span>
     {/if}

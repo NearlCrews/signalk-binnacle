@@ -403,7 +403,12 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   Tiles in one grid stay equal height in every state, and a state badge's line is held while the
   tile is calm, so Stale, Warning, or Alarm appearing never moves the numeral: the `.value` slot reserves the hero line box
   (`--hero-leading`), and a no-sensor tile renders its `.muted-note` gloss inside that slot, centered,
-  never collapsing shorter than its value siblings. Tile content centers on both axes (the gauge-face
+  never collapsing shorter than its value siblings. Every tile has the same four lines: the value,
+  the `.tile-aux` line (reserved at the ROT needle's height, holding the one supporting item: the
+  stale age while stale, otherwise the tile mark or the secondary note), the one-line `.tile-label`
+  (ending in an ellipsis, with the whole label in its title), and the badge line. So the numerals, labels, and
+  badges of a row's tiles sit at the same heights, and a tile going stale swaps its mark for its age
+  without changing shape. Tile content centers on both axes (the gauge-face
   read); instrument tiles are the one centered numeric family, and list rows, stat grids, and
   nav-metrics stay start-aligned. Tile marks (the `viz` field on a TileDef) are quiet inline SVG in
   `currentColor`, never brighter than the value: `Sparkline` (recent-history polyline for continuous
@@ -414,8 +419,8 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   full dock height (`grid-auto-rows: minmax(min-content, 1fr)`, falling back to min-content and the
   dock scroll when the tile set outgrows it), tile content centers vertically in a stretched row, an
   empty tile is never full width (`.tile--empty` overrides the full-row modifiers back to a single
-  column), and `grid-auto-flow: row dense` keeps the grid hole-free, allowed to deviate from the
-  customize order only where a hole would otherwise sit. Instrument tiles are buttons: selecting one
+  column), and `grid-auto-flow: row` is not dense: a full-row tile after a lone half tile leaves a
+  hole rather than pulling a later tile backward, so Tab order always follows the visual order. Instrument tiles are buttons: selecting one
   opens an in-dock detail view with value, status, zone, source, update age, and the Signal K paths
   behind the reading. The button's accessible name includes the value, unit, freshness, alarm zone,
   and action. Warning, Alarm, and Stale render as tinted badges (`.badge--warning`,
