@@ -16,23 +16,20 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 
 ![The Binnacle chart in the day theme, centered on Boston Harbor, with the MOB button and theme control in the top bar and the live status strip along the bottom](https://raw.githubusercontent.com/NearlCrews/signalk-binnacle/main/static/screenshots/01-chart.png)
 
-## What's new in 0.23.0
+## What's new in 0.24.0
 
-- **Shallow-water alarm:** a safety strip with the depth, the limit, and its datum. Acknowledge
-  quiets this display and names the depth it sounds again below, so further shoaling is never
-  hidden.
-- **Alarms at a glance:** caution-grade alerts show as a count on the status strip, "Sound off"
-  shows while a watch is armed on a display that cannot sound alarms, and alarm strips carry a
-  heavier border, a light grade wash, and the time they were raised.
-- **Helm readability:** larger strip readouts on helm displays, stale numbers underlined so they
-  read as stale in night-red too, and running text spaced for reading at arm's length.
-- **A phone held sideways:** the status strip keeps one row with icon actions, so the chart keeps
-  most of the screen. Panels and the menu rise from the bottom, and touch behaves like a native app.
-- **One visual standard:** themed checkboxes and switches, one corner radius, shared empty and retry
-  states, and a paper-chart day palette that is themed from the first frame.
-- **Compatibility:** Radar API 3.4.0, MapLibre GL JS 6.14, and current chart sources and tooling.
+- **One layout standard:** repeated items are the same size, labels and values share lines across
+  a surface, and nothing squeezes, clips, or jumps when a state changes.
+- **A status strip on one grid:** equal data cells with every value on one baseline, the pinned
+  actions as equal tiles, and problems shown in their own cell or on one caution line.
+- **Steady strips and tiles:** every strip's readouts sit on the same columns, alarm actions keep
+  their slots, and instrument tiles line up their numerals across a row.
+- **Phones and large text:** top bar chips and banner actions give way as whole items instead of
+  overlapping MOB or running off the screen, and the chrome clears a phone's notch.
+- **Clearer notes:** offers and invitations read as information in the accent color (blue by day),
+  never in the alarm color.
 
-See the [0.23.0 changelog](https://github.com/NearlCrews/signalk-binnacle/blob/main/CHANGELOG.md#v0230)
+See the [0.24.0 changelog](https://github.com/NearlCrews/signalk-binnacle/blob/main/CHANGELOG.md#v0240)
 for the full list.
 
 ## What it does

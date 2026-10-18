@@ -6,6 +6,74 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0240"></a>
+
+## [0.24.0] - 2026-10-18
+
+One layout standard across the whole interface: repeated items are the same size, labels and
+values share lines across a surface, and nothing squeezes, clips, or jumps when a state changes.
+
+### Added
+
+- Rebuild the status strip as one grid of equal data cells: a caps label over every value, every
+  value on one shared baseline, and the pinned actions as equal tiles. A wide helm display gets one
+  row with the tiles at the true center; narrower strips wrap whole cells on the same columns, and
+  very large text on a narrow phone sets each label beside its value.
+- Show a problem that belongs to one readout inside its cell (dashed SOG and COG while the fix is
+  lost, Depth Paused, Chart north up), and every other problem on one caution line above the
+  readouts that snaps to the same columns and appears only while something is wrong. The Chart
+  cell is a one-tap return to north up.
+- Show a dimmed layer's opacity on its row, inside its adjust button.
+
+### Changed
+
+- Set the readouts of every strip (navigation, man overboard, anchor, shallow water, collision,
+  Measure, and History) as the status strip's data cells on equal columns.
+- Keep alarm and safety strip actions in fixed slots, and keep an armed confirm at its button's
+  width, so arming changes only the words. The navigation Stop takes the warning style of the
+  anchor Raise and the Cancels.
+- Lay out action rows across the panels as equal cells that wrap as whole buttons, fill a lone
+  action's row, and give every segmented control equal segments.
+- Give every instrument tile the same four lines, so numerals, labels, and badges line up across a
+  row. A stale tile shows its age in place of its trend mark rather than growing a line.
+- Keep each AIS row's readouts in fixed slots, with the risk badge at the trailing edge, so the
+  collision numbers stack in columns down the list.
+- Let the top bar's chips give way whole when the bar runs out of room, so they never squeeze or
+  cover the MOB button. The menu and theme buttons sit flat beside the chips.
+- Show offers and invitations (the first-run welcome, the NOAA ENC offer, the sunset theme offer,
+  and an arrival) as an information note in the accent color (blue by day) rather than in the alarm
+  color.
+- Keep the top bar, banners, map controls, status badge, and strips on one edge inset that clears
+  a phone's notch.
+- Set every saved-card value's unit in its own slot, show storage used and its limit on separate
+  rows, and give the weather map's tapped-point readout labeled cells.
+- Give the editor dialogs one inset and an equal-cell footer, and hold a unit column in every unit
+  field so stacked inputs end on one edge.
+- Step long distances down in precision (12.34, 123.4, 1234 nm) so they fit their cell.
+- Size icons by one rule per role, and keep a panel title on the same line whether or not the panel
+  has a subtitle.
+- Show the navigation ETA's AM or PM in the unit slot, so a 12-hour time fits its column, and an
+  anchor watch's radius as the cell's qualifier, so the distance is never cut.
+- Update the Lucide icons.
+
+### Fixed
+
+- Enable on the status strip's alarm-sound notice now restores sound after the browser suspends
+  audio (a backgrounded tab, a phone call); before, the tap did nothing and alarms stayed silent.
+- While a chart rotation has fallen back to north up, a tap on the Chart cell now explains the
+  fallback instead of discarding the chosen rotation; Use north up on the caution line stops
+  rotating for good, and screen readers now hear the reason for a fallback.
+- A server alarm that offers all four actions now sets them on their own row instead of squeezing
+  them beside the title.
+- The connection dot on the status strip is now an easier tap target on a phone.
+- Arming a Measure move on a phone no longer grows the strip over the point being moved.
+- At large text on a narrow phone, a banner's actions now wrap as whole buttons instead of running
+  off the screen.
+- Screen readers now hear a space between a value and its unit ("5.8 kn", not "5.8kn").
+- Chart notices now start below the Signal K access banner instead of covering its Approve action.
+- The menu no longer reads as a blue card inside a white rim by day.
+- Acknowledging an alert chip no longer changes its width and moves its neighbors.
+
 <a id="v0230"></a>
 
 ## [0.23.0] - 2026-10-16
