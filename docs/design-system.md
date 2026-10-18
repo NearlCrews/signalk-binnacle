@@ -217,12 +217,16 @@ that matter when you do touch this:
 - Danger and caution must stay distinguishable in every theme. `--alarm` is the brighter, `--warning`
   the dimmer; that brightness gap is the contract.
 - The theme has two controls on one `ThemeController`: the toolbar button (tap to cycle, hold for
-  night) and Display's Day, Dusk, and Night choice. At large text sizes a phone top bar fits only one
-  chip beside MOB, so the toolbar button yields to an Update or collision mute chip. Display is the
-  path that is always reachable; keep it when changing either control. Both read their names from
-  `THEME_LABELS`.
+  night) and Display's Day, Dusk, and Night choice. When the top bar runs out of room, the toolbar
+  button can give way (see the next item). Display is the path that is always reachable; keep it when
+  changing either control. Both read their names from `THEME_LABELS`.
 - The top bar shows no brand at any width; the `h1` stays for assistive technology, and the app name
   and version live in the menu footer.
+- The top bar's chips never squeeze and never spill over MOB. The `yieldToFit` action (`src/app`)
+  measures the chips' natural widths against their flank and hides whole chips in rank order
+  (`data-yield`, highest first): Chart Locker, then the profile, the theme button, and Update. The
+  collision mute carries no rank and never yields. A new chip takes a rank in that order; the crowded
+  top bar test in `ui-quality.spec.ts` checks the guarantee at three widths.
 
 ## 4. The modular CSS architecture
 

@@ -689,3 +689,52 @@ test('keeps a slim top bar with MOB centered and the brand for assistive tech on
   expect(Math.round(bar.height)).toBe(Math.round(mob.height) + 9);
   expect(Math.abs(mob.x + mob.width / 2 - 512)).toBeLessThanOrEqual(1);
 });
+
+test('a crowded top bar gives way whole chips and never covers MOB', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
+  await stubVesselsSelf(page);
+  await page.goto('/');
+  const mob = page.getByRole('button', { name: 'MOB: mark man overboard here' });
+  await expect(mob).toBeVisible({ timeout: 20_000 });
+  // A collision mute and a waiting update, the two chips the fixture cannot raise on its own, beside
+  // the theme chip, with the same ranks the app gives them.
+  await page.evaluate(() => {
+    const actions = document.querySelector('.topbar-actions');
+    const real = document.querySelector('.topbar-action');
+    if (!actions || !real) throw new Error('no top bar actions');
+    // The real wrapper's classes carry the component's style scope, which the chip rules need.
+    const scope = [...real.classList].filter((name) => !name.startsWith('topbar-action'));
+    const chip = (rank: string, html: string) => {
+      const span = document.createElement('span');
+      span.classList.add('topbar-action', ...scope);
+      if (rank) span.dataset.yield = rank;
+      span.innerHTML = html;
+      actions.prepend(span);
+    };
+    chip('1', '<button type="button" class="btn btn-primary btn-pill">Update</button>');
+    chip('', '<button type="button" class="btn btn-warning btn-pill">Muted 15min</button>');
+  });
+  for (const width of [601, 700, 820]) {
+    await page.setViewportSize({ width, height: 700 });
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const mobBox = document.querySelector('.mob-btn')?.getBoundingClientRect();
+          const flank = document.querySelector('.topbar-actions')?.getBoundingClientRect();
+          if (!mobBox || !flank) return ['top bar not laid out'];
+          const faults: string[] = [];
+          for (const el of document.querySelectorAll<HTMLElement>('.topbar-action > *')) {
+            if (el.getClientRects().length === 0) continue;
+            const box = el.getBoundingClientRect();
+            const name = el.textContent?.trim() || el.className;
+            if (box.left < mobBox.right) faults.push(`${name} covers MOB`);
+            if (box.left < flank.left - 0.5) faults.push(`${name} spills out of its flank`);
+            if (el.scrollWidth > el.clientWidth + 1) faults.push(`${name} is squeezed`);
+          }
+          return faults;
+        }),
+      )
+      .toEqual([]);
+  }
+  await expect(page.getByRole('button', { name: 'Muted 15min' })).toBeVisible();
+});

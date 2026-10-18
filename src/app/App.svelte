@@ -266,6 +266,7 @@ import StatusStrip from './StatusStrip.svelte';
 import { createSafetyController } from './safety-controller.svelte';
 import { soundOffState, watchArmed } from './sound-off';
 import { createStreamController } from './stream-controller.svelte';
+import { yieldToFit } from './yield-to-fit';
 
 // serverOrigin reads location, fixed for the page lifetime: capture once, not at every call site.
 const origin = serverOrigin();
@@ -3122,7 +3123,9 @@ const plotterActions = {
       onLocate={flyToPosition}
       writeBlocked={auth.writeBlocked}
     />
-    <div class="topbar-actions">
+    <!-- Chips give way whole when the flank runs out of room: Chart Locker first, then the profile,
+         the theme, and Update. The collision mute never yields. -->
+    <div class="topbar-actions" use:yieldToFit>
       {#if collisionMute.active}
         <span class="topbar-action topbar-action--collision">
           <button
@@ -3139,7 +3142,7 @@ const plotterActions = {
         </span>
       {/if}
       {#if updateReady}
-        <span class="topbar-action topbar-action--update">
+        <span class="topbar-action topbar-action--update" data-yield="1">
           <button
             type="button"
             class="btn btn-primary btn-pill"
@@ -3152,7 +3155,7 @@ const plotterActions = {
           </button>
         </span>
       {/if}
-      <span class="topbar-action topbar-action--companion">
+      <span class="topbar-action topbar-action--companion" data-yield="4">
         <ChartLockerStatus
           present={companionStatus.present}
           state={companionStatus.state}
@@ -3162,7 +3165,7 @@ const plotterActions = {
           onRetry={() => void companionStatus.refresh()}
         />
       </span>
-      <span class="topbar-action topbar-action--profile">
+      <span class="topbar-action topbar-action--profile" data-yield="3">
         <ProfileSwitcher
           active={profileStore.active}
           profiles={profileStore.profiles}
@@ -3171,7 +3174,9 @@ const plotterActions = {
           onManage={() => openPanel('profiles')}
         />
       </span>
-      <span class="topbar-action topbar-action--theme"><ThemeToggle controller={theme} /></span>
+      <span class="topbar-action topbar-action--theme" data-yield="2"
+        ><ThemeToggle controller={theme} /></span
+      >
     </div>
   </header>
   <PlotterView
@@ -3625,6 +3630,12 @@ const plotterActions = {
 .topbar-action {
   display: contents;
 }
+.topbar-action > :global(*) {
+  flex: none;
+}
+.topbar-action:global(.is-yielded) {
+  display: none;
+}
 @media (max-width: 600px) {
   .topbar {
     gap: var(--space-1);
@@ -3637,14 +3648,7 @@ const plotterActions = {
     gap: var(--space-1);
   }
   .topbar-action--companion,
-  .topbar-action--profile {
-    display: none;
-  }
-  /* At large text sizes only one chip fits beside MOB on a phone, so the theme button yields to a
-     collision mute or an update; Display keeps the same theme choice reachable from the menu. */
-  .topbar-actions:has(.topbar-action--collision) .topbar-action--update,
-  .topbar-actions:has(.topbar-action--collision) .topbar-action--theme,
-  .topbar-actions:has(.topbar-action--update) .topbar-action--theme,
+  .topbar-action--profile,
   .collision-label {
     display: none;
   }

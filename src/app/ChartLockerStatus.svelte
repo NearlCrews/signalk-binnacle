@@ -124,12 +124,4 @@ const ariaLabel = $derived(`Offline charts, ${visibleValue}, ${actionLabel}`);
 .cl-value {
   white-space: nowrap;
 }
-/* On a phone, "Offline:" is redundant with the persistent download-and-state icon. Keep the truthful
-   cache or failure value visible instead of collapsing the control to an ambiguous glyph. */
-@media (max-width: 600px) {
-  .cl-brand,
-  .cl-value {
-    display: none;
-  }
-}
 </style>
