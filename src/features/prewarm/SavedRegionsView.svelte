@@ -135,7 +135,7 @@ function chartList(region: SavedRegionDto): string {
         <dl class="card-stats">
           <div>
             <dt class="caps-label">Saved</dt>
-            <dd><span class="num">{cached.value}</span> {cached.unit}</dd>
+            <dd><span class="num">{cached.value}</span> <span class="unit">{cached.unit}</span></dd>
           </div>
           {#if region.lastDownloadedAt !== null}
             <div>
@@ -205,7 +205,7 @@ function chartList(region: SavedRegionDto): string {
               <dd>{chartList(region)}</dd>
             </div>
           </dl>
-          <div class="area-detail-actions">
+          <div class="panel-controls">
             <button type="button" class="btn btn-ghost" onclick={() => onShow(region)}>
               <Eye size={16} aria-hidden="true" />
               Show on chart
@@ -294,13 +294,5 @@ function chartList(region: SavedRegionDto): string {
   max-inline-size: 62%;
   overflow-wrap: anywhere;
   text-align: end;
-}
-.area-detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-.area-detail-actions .btn {
-  flex: 1 1 auto;
 }
 </style>

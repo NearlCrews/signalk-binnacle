@@ -187,14 +187,15 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
       ),
     )}
 />
-<label class="departure">
-  <span>Departure</span>
+<label class="field-row">
+  <span class="field-row-name">Departure</span>
   <input
     class="input"
     type="datetime-local"
     bind:value={departureLocal}
     aria-label="Planned departure date and time, used for the arrival clock times"
   >
+  <span class="field-row-unit"></span>
 </label>
 {#snippet legBody(
   leg: (typeof workingLegs)[number],
@@ -339,18 +340,6 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
 }
 .leg-line--metrics .num {
   color: var(--text);
-}
-.departure {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.departure input {
-  min-block-size: var(--control-size);
-}
-.departure > span {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
 }
 /* The route-edit working-plan stats use the global .stat-grid system in app.css. */
 </style>

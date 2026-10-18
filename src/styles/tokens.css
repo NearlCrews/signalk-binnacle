@@ -116,6 +116,9 @@
   --switch-on-thumb: var(--accent-contrast);
   /* The stat-grid unit column's floor, so short and empty units keep the values in one column. */
   --stat-unit-min-width: 1.25rem;
+  /* A labeled field's unit column (.field-row-unit): the longest field unit ("days") at the label
+     size, held even for a unitless field so stacked inputs end on one edge. */
+  --field-unit-min-width: 2rem;
 
   --surface: #cfe0ec;
   --surface-raised: #ffffff;

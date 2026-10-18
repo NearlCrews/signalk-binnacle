@@ -5,7 +5,7 @@ import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import type { Waypoint } from '$entities/waypoint';
-import { formatBearingOr, formatLatitude, formatLongitude, formatMetersOrNm } from '$shared/lib';
+import { formatBearingOr, formatLatitude, formatLongitude, metersOrNmParts } from '$shared/lib';
 import {
   defaultNavSort,
   MAX_NAV_ROWS,
@@ -321,6 +321,7 @@ $effect(() => {
       row,
     )}
       {@const waypoint = row.waypoint}
+      {@const distance = metersOrNmParts(row.distanceMeters, units.mode)}
       <div class="card-head">
         <button
           type="button"
@@ -344,15 +345,16 @@ $effect(() => {
         <div>
           <dt class="caps-label">Distance</dt>
           <dd>
-            <span class="num">{formatMetersOrNm(row.distanceMeters, units.mode)}</span>
+            <span class="num">{distance.value}</span> <span class="unit">{distance.unit}</span>
           </dd>
         </div>
         <div>
           <dt class="caps-label">Bearing</dt>
           <dd title="Bearing in degrees true">
-            <span class="num">
-              {row.bearingRad === undefined ? '--' : `${formatBearingOr(row.bearingRad)}°T`}
-            </span>
+            <span class="num">{formatBearingOr(row.bearingRad)}</span>
+            {#if row.bearingRad !== undefined}
+              <span class="unit">&deg;T</span>
+            {/if}
           </dd>
         </div>
       </dl>

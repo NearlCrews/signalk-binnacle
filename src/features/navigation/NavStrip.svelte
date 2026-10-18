@@ -336,7 +336,7 @@ const eta = $derived.by(() => {
            fixed aria-label would keep announcing the unarmed name. -->
       <button
         type="button"
-        class="btn btn-pill btn-strip label-reserve"
+        class="btn btn-pill btn-strip btn-warning label-reserve"
         data-reserve={stopArm.armed ? 'Stop' : 'Confirm stop?'}
         onclick={tapStop}
       >

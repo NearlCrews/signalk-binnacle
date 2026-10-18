@@ -30,6 +30,26 @@
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+/* A labeled one-line field: the name takes the row's flexible start, then the input, then a unit
+   column reserved even when empty, so a stack of fields (UnitField, the route plan's Departure) ends
+   every input on one edge. It wraps the input and unit under the name rather than squeezing them. */
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-size);
+}
+.field-row-name {
+  flex: 1 1 6rem;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.field-row-unit {
+  min-inline-size: var(--field-unit-min-width);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
 
 /* The panel-wide search field: the .input box stretched across the panel, shared by the nearby
    vessels, Find places, and Waypoints lists through the SearchInput primitive so all three present

@@ -66,8 +66,8 @@ function commit(event: Event): void {
 <!-- The labeled number-input-with-unit row shared by the alarm thresholds, the anchor watch
      radius, and the route planning speed, so the field shape cannot drift per panel. -->
 <div class="unit-field">
-  <label class="field" class:disabled>
-    <span class="name">{label}</span>
+  <label class="field-row" class:disabled>
+    <span class="field-row-name">{label}</span>
     <input
       class="input"
       type="number"
@@ -82,9 +82,7 @@ function commit(event: Event): void {
       style:inline-size={inputWidth}
       onchange={commit}
     >
-    {#if unit}
-      <span class="unit">{unit}</span>
-    {/if}
+    <span class="field-row-unit">{unit ?? ''}</span>
   </label>
   <p id={errorId} class="alert-note field-error" role="status" hidden={!error}>{error}</p>
 </div>
@@ -96,32 +94,16 @@ function commit(event: Event): void {
 .field-error {
   margin-block: var(--space-1) 0;
 }
-.field {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  min-block-size: var(--control-size);
-}
-.field.disabled {
+/* The row comes from the shared .field-row; the box from the shared .input primitive (44px tap
+   target, raised fill). Only the mono numerals and the width are field-specific. */
+.field-row.disabled {
   opacity: var(--disabled-opacity);
 }
-.name {
-  flex: 1 1 6rem;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
-/* The box comes from the shared .input primitive (44px tap target, raised fill); only the mono
-   numerals, the width, and the accent are field-specific. */
-.field input {
+.field-row input {
   max-inline-size: 100%;
   min-inline-size: 0;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-input-large);
-}
-.unit {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
 }
 </style>

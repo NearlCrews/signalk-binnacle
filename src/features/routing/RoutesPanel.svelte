@@ -425,7 +425,12 @@ const emptyMessage = $derived(emptyReason());
   {/if}
 
   {#if working}
-    <div class="editing" role="group" aria-label="Route under edit" bind:this={editingGroup}>
+    <div
+      class="editing card-frame card-stack"
+      role="group"
+      aria-label="Route under edit"
+      bind:this={editingGroup}
+    >
       {#if naming}
         <NameEntry
           label="Save route as"
@@ -555,10 +560,7 @@ const emptyMessage = $derived(emptyReason());
       <dl class="card-stats">
         <div>
           <dt class="caps-label">Distance</dt>
-          <dd>
-            <span class="num">{distanceNm}</span>
-            nm
-          </dd>
+          <dd><span class="num">{distanceNm}</span> <span class="unit">nm</span></dd>
         </div>
         <div>
           <dt class="caps-label">Waypoints</dt>
@@ -769,14 +771,11 @@ const emptyMessage = $derived(emptyReason());
   padding-block-start: var(--space-2);
   border-block-start: 1px solid var(--border);
 }
+/* The route under edit is a saved card in its active treatment: the shared frame and body, lit with
+   the accent border, the leading active bar, and the accent tint. */
 .editing {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.6rem;
-  border: 1px solid var(--accent);
+  border-color: var(--accent);
   border-inline-start-width: var(--active-bar-width);
-  border-radius: var(--radius-md);
   background: var(--accent-tint);
   box-shadow: var(--shadow-overlay);
 }

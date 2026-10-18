@@ -30,12 +30,18 @@
 }
 /* The border, radius, and raised fill come from the shared .card-frame (set on the li in SavedList);
    the shadow, layout, and the active-state accent stay here. */
-.saved li {
-  position: relative;
+/* One card body: a column at one gap and one inset, shared by the saved cards, the report cards, and
+   a one-off card (the route under edit), so every card's content starts on the same edge. */
+.saved li,
+.card-list > li,
+.card-stack {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.45rem 0.55rem;
+}
+.saved li {
+  position: relative;
   box-shadow: var(--shadow-overlay);
   transition:
     border-color var(--transition-fast),
@@ -53,12 +59,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-}
-.card-list > li {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.45rem 0.55rem;
 }
 /* A report card's head: the title, its state, and the time on one line that wraps at 320 px rather
    than overflowing; the time sits at the trailing edge. */
@@ -125,6 +125,10 @@
 .card-stats .num {
   font-weight: 600;
   color: var(--text);
+}
+/* A stat's unit sits in its own slot at the unit size, as in the stat grid and the strips. */
+.card-stats .unit {
+  font-size: var(--text-xs);
 }
 .saved .actions {
   display: flex;

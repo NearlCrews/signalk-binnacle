@@ -125,8 +125,10 @@ describe('WaypointsPanel', () => {
       waypoints: [{ id: 'e', name: 'East', position: { latitude: 0, longitude: 1 } }],
       vessel: boat,
     });
-    expect(body).toContain('090°T');
-    expect(body).toContain('nm');
+    expect(body).toMatch(
+      /<span class="num">090<\/span>\s*(<!--[^>]*-->)*<span class="unit">°T<\/span>/,
+    );
+    expect(body).toMatch(/<span class="unit">nm<\/span>/);
     expect(body).not.toContain('Distance and bearing need a fresh GPS fix.');
   });
 

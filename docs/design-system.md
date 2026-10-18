@@ -381,7 +381,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   a tap can help: Enable while the browser blocks audio, Try again after the device failed, and no
   action at all where Web Audio is unsupported. Every tappable cell and notice is a full 44px target.
 - Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-md +
-  surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.empty-state`
+  surface-raised; a bordered editor or card frame composes it rather than restating it), the card
+  body shared by the saved cards, the `.card-list` report cards, and `.card-stack` for a one-off card
+  such as the route under edit (one column, one gap, one inset), the `.card-stats` line (each value
+  in `.num` and its unit in a `.unit` slot), `.saved` plus its card list (used through the SavedList
+  primitive), `.empty-state`
   (the dashed empty-list block, used through the EmptyState primitive), `.stat-grid`
   (the label/value stat readout: every row emits its label and exactly two value cells, the value
   and its unit, so a missing cell never shifts the rows below; a text value takes `.stat-text` for
@@ -515,8 +519,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   edit, History playback, and the top-level plotter shell), with `.bottom-strip--accent` and `.bottom-strip--wide`
   (a strip whose controls need the room, Measure's leg table among them) as modifiers. Strip
   actions are the shared button system: `.btn .btn-pill .btn-strip` (the strip's larger text and
-  accent color, pushed to the trailing edge), with `.btn-warning` for a consequence-bearing tap (the
-  anchor Raise, the MOB and route-edit Cancels), `.btn-danger` for a destructive one, and
+  accent color, pushed to the trailing edge), with `.btn-warning` for a consequence-bearing armed tap
+  that ends or discards an active state (the anchor Raise, the navigation Stop, the MOB and route-edit
+  Cancels), `.btn-danger` for an immediate destructive one (Measure's Delete point), and
   `.btn-alarm` (alarm-colored and bold) for the strip's one obvious next action (Steer to MOB). An
   acknowledged strip (`.is-ack`) keeps its color and full contrast and steps down to a dashed
   border and the plain surface; never dim a live condition with opacity. Alarm and caution strips

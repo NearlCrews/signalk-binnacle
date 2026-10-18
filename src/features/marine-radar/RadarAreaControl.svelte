@@ -285,7 +285,7 @@ onDestroy(() => {
 {#if supported}
   <p class="area-summary">{areaSummary()}</p>
   {#if activeDraft && proposed}
-    <div class="area-editor" role="group" aria-label={`${definition.name} editor`}>
+    <div class="area-editor card-frame" role="group" aria-label={`${definition.name} editor`}>
       {#if definition.type === 'zone' && 'startDistance' in proposed}
         {@const zone = proposed as RadarZoneValue}
         <UnitField
@@ -542,8 +542,6 @@ onDestroy(() => {
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
 }
 .enabled-row {
   display: flex;

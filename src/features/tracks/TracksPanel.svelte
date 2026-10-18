@@ -581,10 +581,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       <dl class="card-stats">
         <div>
           <dt class="caps-label">Distance</dt>
-          <dd>
-            <span class="num">{distanceNm}</span>
-            nm
-          </dd>
+          <dd><span class="num">{distanceNm}</span> <span class="unit">nm</span></dd>
         </div>
         <div>
           <dt class="caps-label">Duration</dt>
@@ -593,7 +590,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
         {#if spanText}
           <div>
             <dt class="caps-label">Recorded</dt>
-            <dd>{spanText}</dd>
+            <dd><span class="num">{spanText}</span></dd>
           </div>
         {/if}
       </dl>

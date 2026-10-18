@@ -14,6 +14,7 @@ import {
   pressureUnit,
   speedUnit,
 } from '$shared/lib';
+import { LoadNote } from '$shared/ui';
 import type { TimeTravelController } from './time-travel-controller.svelte';
 import {
   TIME_TRAVEL_PRESETS,
@@ -163,11 +164,13 @@ const liveMessage = $derived.by(() => {
     {/if}
 
     {#if errorText}
-      <div class="alert-note load-error action-note" role="alert">
-        <span>{errorText}</span>
-        <button type="button" class="btn btn-ghost" onclick={() => void controller.retry()}>
-          Retry
-        </button>
+      <div class="load-error">
+        <LoadNote
+          state="error"
+          message={errorText}
+          onRetry={() => void controller.retry()}
+          retryName="history"
+        />
       </div>
     {/if}
 
@@ -186,16 +189,12 @@ const liveMessage = $derived.by(() => {
         >
       </div>
     {:else if controller.status === 'failed' && controller.samples.length === 0}
-      <div class="row load-failed">
-        <span class="alert-note" role="alert">Could not load history.</span>
-        <button
-          type="button"
-          class="btn btn-pill btn-strip"
-          onclick={() => void controller.retry()}
-        >
-          Retry
-        </button>
-      </div>
+      <LoadNote
+        state="error"
+        message="Could not load history."
+        onRetry={() => void controller.retry()}
+        retryName="history"
+      />
     {:else if controller.samples.length > 0}
       <div class="scrubber" role="group" aria-label="History playback">
         <button
@@ -371,14 +370,6 @@ const liveMessage = $derived.by(() => {
   margin-block: var(--space-2);
 }
 
-.load-error span {
-  flex: 1;
-}
-
-.load-failed {
-  align-items: center;
-}
-
 @container (max-width: 26rem) {
   .range-row,
   .speed-row {
@@ -395,11 +386,6 @@ const liveMessage = $derived.by(() => {
   .speed-options {
     display: grid;
     grid-template-columns: repeat(3, minmax(var(--control-size), 1fr));
-  }
-
-  .load-error {
-    align-items: stretch;
-    flex-direction: column;
   }
 }
 </style>

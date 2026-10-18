@@ -587,11 +587,14 @@ function discardActiveDraft(): void {
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+/* Every head reserves the Auto button's control height, so a column of controls keeps one rhythm
+   whether or not a control offers Auto. */
 .field-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+  min-block-size: var(--control-size);
 }
 /* The live value and the Auto toggle share the trailing end of the head row, so an auto-capable
    control reads as one labeled line: name on the left, value and Auto on the right. */
