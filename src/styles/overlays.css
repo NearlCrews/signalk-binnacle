@@ -239,13 +239,6 @@ dialog.editor-dialog[open] {
   overflow: auto;
   overscroll-behavior: contain;
 }
-/* The editor's three bands share one inset, so the title, the fields, and the actions start on the
-   same edge. */
-.editor-dialog .dialog-header,
-.editor-dialog .dialog-body,
-.editor-dialog .dialog-footer {
-  padding: var(--space-3);
-}
 .modal-card .dialog-footer {
   display: flex;
   flex-wrap: wrap;
@@ -253,6 +246,13 @@ dialog.editor-dialog[open] {
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-block-start: 1px solid var(--border);
+}
+/* The editor's three bands share one inset, so the title, the fields, and the actions start on the
+   same edge. After the .modal-card bands, which it overrides at equal specificity. */
+.editor-dialog .dialog-header,
+.editor-dialog .dialog-body,
+.editor-dialog .dialog-footer {
+  padding: var(--space-3);
 }
 /* The editor's actions are equal cells that wrap as whole buttons. At enlarged text a long label
    still wraps inside its cell, so the footer never widens the dialog past the viewport. */

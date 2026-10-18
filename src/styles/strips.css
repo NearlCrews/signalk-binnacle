@@ -113,22 +113,26 @@
 .bottom-strip .action-group {
   margin-inline-start: auto;
 }
-.bottom-strip .slot-empty {
-  min-block-size: var(--control-size);
-}
 /* A wide gutter between paired safety buttons (Mute/Acknowledge, Acknowledge/Raise) so they do
    not read as twins and a wrong tap in a seaway is less likely. */
 .bottom-strip .actions--safety {
   gap: var(--space-4);
 }
 /* A phone strip gives its actions their own full-width row of equal cells that wrap as whole
-   buttons, rather than squeezing a cluster beside the title. */
+   buttons, rather than squeezing a cluster beside the title. A group of four (a server alarm that
+   offers Silence, Mute here, Acknowledge, and Open Alarms) is wider than the strip at any width, so
+   it takes the same row everywhere. CSS cannot join a media condition and a selector in one rule. */
 @media (max-width: 600px) {
   .bottom-strip .action-group {
     flex-basis: 100%;
     grid-auto-flow: row;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
   }
+}
+.bottom-strip .action-group:has(> :nth-child(4)) {
+  flex-basis: 100%;
+  grid-auto-flow: row;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
 }
 /* Acknowledged: the operator has it in hand, but the condition persists, so the strip keeps its
    alarm or warning color and full text contrast and steps down to a dashed border; the ack tag
@@ -146,11 +150,4 @@
   min-block-size: var(--control-size);
   font-weight: 600;
   white-space: nowrap;
-}
-.bottom-strip .metric b {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--text-readout);
-  font-weight: 600;
-  color: var(--text);
 }

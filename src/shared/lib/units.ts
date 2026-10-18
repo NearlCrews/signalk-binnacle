@@ -402,6 +402,21 @@ export function formatClockTime(
   return new Date(timeMs).toLocaleTimeString([], opts?.seconds ? CLOCK_OPTS_HMS : CLOCK_OPTS_HM);
 }
 
+// The same local clock time as a value and its day period ("02:35" and "PM"), for a data cell that
+// sets the period in its unit slot so a 12-hour time fits a column. A 24-hour locale has no period,
+// so the unit is empty.
+export function clockTimeParts(timeMs: number): { value: string; unit: string } {
+  if (!Number.isFinite(timeMs)) return { value: '', unit: '' };
+  const parts = new Intl.DateTimeFormat([], CLOCK_OPTS_HM).formatToParts(new Date(timeMs));
+  const unit = parts.find((part) => part.type === 'dayPeriod')?.value ?? '';
+  const value = parts
+    .filter((part) => part.type !== 'dayPeriod')
+    .map((part) => part.value)
+    .join('')
+    .trim();
+  return { value, unit };
+}
+
 // A short calendar date ("Mar 4"), for a label that has already given the time and only needs to
 // say which DAY it belongs to: an arrival that crosses local midnight, a handoff snapshot from
 // yesterday. Constructed once rather than per call; an Intl formatter is expensive to build and

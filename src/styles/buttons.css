@@ -12,6 +12,12 @@
   grid-auto-columns: 1fr;
   gap: var(--space-2);
 }
+/* A held, empty action slot: an action that does not apply right now keeps its cell at the control
+   height, so the group's other buttons never slide under the thumb as the state changes. Shared by
+   the alarm strips and the Alarms panel rows. */
+.slot-empty {
+  min-block-size: var(--control-size);
+}
 /* A banner's actions (the chart's top offers and toasts, the access banner, the sunset offer) take
    their own full line as rows of equal cells that wrap whole once the banner's host, which declares
    the `banner` container, is too narrow to set them side by side: a phone, or large text. In rem, so

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PLACEHOLDER } from './coords';
 import {
+  clockTimeParts,
   degreesToRadians,
   feetToMeters,
   formatBearingOr,
@@ -167,6 +168,24 @@ describe('metersOrNmParts', () => {
 
   it('carries no unit beside the placeholder', () => {
     expect(metersOrNmParts(undefined)).toEqual({ value: '--', unit: '' });
+  });
+});
+
+describe('clockTimeParts', () => {
+  it('splits the clock time from its day period, matching formatClockTime', () => {
+    // Locale-dependent rendering, so compare against the joined form with whitespace ignored (ICU
+    // sets a narrow no-break space before the period).
+    const at = Date.UTC(2026, 5, 11, 14, 32, 5);
+    const parts = clockTimeParts(at);
+    expect(parts.value.match(/\d+/g)).toHaveLength(2);
+    expect(parts.value).not.toMatch(/^\s|\s$/);
+    expect(`${parts.value}${parts.unit}`.replace(/\s/g, '')).toBe(
+      formatClockTime(at).replace(/\s/g, ''),
+    );
+  });
+
+  it('is blank for NaN', () => {
+    expect(clockTimeParts(Number.NaN)).toEqual({ value: '', unit: '' });
   });
 });
 

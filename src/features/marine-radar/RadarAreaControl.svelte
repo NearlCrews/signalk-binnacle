@@ -550,10 +550,6 @@ onDestroy(() => {
   justify-content: space-between;
   gap: var(--space-2);
 }
-.field-label {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
 @media (max-width: 360px) {
   .enabled-row {
     align-items: stretch;

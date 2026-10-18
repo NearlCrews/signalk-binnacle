@@ -11,8 +11,8 @@ import {
   type CourseGuidance,
 } from '$entities/course';
 import {
+  clockTimeParts,
   formatBearingOr,
-  formatClockTime,
   formatDuration,
   formatNmOr,
   formatSpeedOr,
@@ -195,8 +195,10 @@ const ttg = $derived(
 // the placeholder for an absent value, so routeDtg needs no guard of its own (the template only
 // renders it inside the routeProgress block anyway).
 const routeDtg = $derived(formatNmOr(routeProgress?.distanceToGoMeters));
+// The clock time and its day period, set apart so a 12-hour time ("02:35" and "PM") fits its column.
 const eta = $derived.by(() => {
-  if (!routeProgress) return PLACEHOLDER;
+  const none = { value: PLACEHOLDER, unit: '' };
+  if (!routeProgress) return none;
   // The server's estimatedTimeOfArrival (calcValues) is the NEXT-point ETA, not the route end, so
   // it only equals the route arrival on the final leg. On earlier legs the honest route ETA is the
   // local clock estimate from the whole-route time-to-go. Guard against an unparseable string and
@@ -204,11 +206,11 @@ const eta = $derived.by(() => {
   const iso = guidance.isLastPoint ? guidance.estimatedTimeOfArrivalIso : undefined;
   if (iso) {
     const at = new Date(iso).getTime();
-    if (!Number.isNaN(at)) return formatClockTime(at);
+    if (!Number.isNaN(at)) return clockTimeParts(at);
   }
   const ttgSeconds = routeProgress.timeToGoSeconds;
-  if (ttgSeconds == null || !Number.isFinite(ttgSeconds)) return PLACEHOLDER;
-  return formatClockTime(Date.now() + ttgSeconds * 1000);
+  if (ttgSeconds == null || !Number.isFinite(ttgSeconds)) return none;
+  return clockTimeParts(Date.now() + ttgSeconds * 1000);
 });
 </script>
 
@@ -408,7 +410,10 @@ const eta = $derived.by(() => {
         >
           <span class="data-cell-label">ETA</span>
           <span class="data-cell-value">
-            <b class="num">{eta}</b>
+            <b class="num">{eta.value}</b>
+            {#if eta.unit}
+              <span>{eta.unit}</span>
+            {/if}
             {#if routeProgress.basis}
               <span class="data-cell-qualifier"
                 >{routeProgress.basis === 'vmg-plan' ? 'VMG+plan' : 'plan'}</span

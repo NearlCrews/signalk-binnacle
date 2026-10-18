@@ -752,9 +752,6 @@ const listHasActions = $derived(
 .alert-actions .flag-tag {
   text-align: center;
 }
-.alert-actions .slot-empty {
-  min-block-size: var(--control-size);
-}
 /* The alert list is the size container its rows ask about. */
 .alert-list {
   container-type: inline-size;
