@@ -30,7 +30,7 @@ describe('NavStrip', () => {
   it('starts the stop control unarmed and labels it by its visible text', () => {
     const body = renderStrip();
     expect(body).toMatch(
-      /<button[^>]*class="btn btn-pill btn-strip btn-warning label-reserve"[^>]*><span>Stop<\/span><\/button>/,
+      /<button[^>]*class="btn btn-pill btn-strip label-reserve btn-warning"[^>]*><span>Stop<\/span><\/button>/,
     );
     expect(body).not.toContain('<span>Confirm stop?</span>');
     // The armed label's width is reserved, so arming changes only the words.

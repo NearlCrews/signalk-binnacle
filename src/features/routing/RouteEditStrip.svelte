@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onDestroy } from 'svelte';
 import type { Route } from '$entities/route';
-import { ConfirmArm } from '$shared/ui';
+import { ArmedButton, ConfirmArm } from '$shared/ui';
 
 // The persistent route-edit mode strip: whenever a working route exists, the mode, its point
 // count, the next step, and the exit actions stay visible, even when the Routes panel has been
@@ -49,14 +49,13 @@ function tapCancel(): void {
       <button type="button" class="btn btn-pill btn-strip" disabled={!canSave} onclick={onSave}>
         Save
       </button>
-      <button
-        type="button"
-        class="btn btn-pill btn-strip btn-warning label-reserve"
-        data-reserve={cancelArm.armed ? 'Cancel' : 'Confirm cancel?'}
+      <ArmedButton
+        label="Cancel"
+        armedLabel="Confirm cancel?"
+        armed={cancelArm.armed}
+        tone="warning"
         onclick={tapCancel}
-      >
-        <span>{cancelArm.armed ? 'Confirm cancel?' : 'Cancel'}</span>
-      </button>
+      />
     </div>
   </div>
 </aside>

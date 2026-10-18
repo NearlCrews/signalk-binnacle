@@ -3,7 +3,7 @@ import { onDestroy } from 'svelte';
 import type { AnchorBlindCause, AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import { formatLengthOr, lengthUnit } from '$shared/lib';
-import { ConfirmArm } from '$shared/ui';
+import { ArmedButton, ConfirmArm } from '$shared/ui';
 
 interface Props {
   anchor: AnchorWatch;
@@ -60,14 +60,13 @@ const acked = $derived(anchor.dragging ? anchor.acknowledged : anchor.blindAckno
             Acknowledge
           </button>
         {/if}
-        <button
-          type="button"
-          class="btn btn-pill btn-strip btn-warning label-reserve"
-          data-reserve={raiseArm.armed ? 'Raise anchor' : 'Confirm raise?'}
+        <ArmedButton
+          label="Raise anchor"
+          armedLabel="Confirm raise?"
+          armed={raiseArm.armed}
+          tone="warning"
           onclick={tapRaise}
-        >
-          <span>{raiseArm.armed ? 'Confirm raise?' : 'Raise anchor'}</span>
-        </button>
+        />
       </div>
     </div>
     <div class="metrics">

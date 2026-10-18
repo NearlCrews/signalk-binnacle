@@ -3,7 +3,7 @@ import { onDestroy } from 'svelte';
 import type { MobStore } from '$entities/mob';
 import type { UnitsStore } from '$entities/units';
 import { formatBearingOr, formatClockTime, metersOrNmParts } from '$shared/lib';
-import { ConfirmArm } from '$shared/ui';
+import { ArmedButton, ConfirmArm } from '$shared/ui';
 import { formatElapsed } from './mob-format';
 
 interface Props {
@@ -90,16 +90,15 @@ const steerWarning = $derived(
       <!-- Every action keeps its slot: acknowledging leaves its word in place, so Cancel never slides
            under the thumb, and an armed confirm keeps its button's width. -->
       <div class="action-group actions--safety">
-        <button
-          type="button"
-          class="btn btn-pill btn-strip btn-alarm label-reserve"
-          data-reserve={steerArm.armed ? 'Steer to MOB' : 'Confirm steer?'}
+        <ArmedButton
+          label="Steer to MOB"
+          armedLabel="Confirm steer?"
+          armed={steerArm.armed}
+          tone="alarm"
           disabled={!mob.position}
           onclick={tapSteer}
           onkeydown={disarmSteerOnEscape}
-        >
-          <span>{steerArm.armed ? 'Confirm steer?' : 'Steer to MOB'}</span>
-        </button>
+        />
         {#if mob.acknowledged}
           <span class="note ack-tag">Acknowledged</span>
         {:else}
@@ -107,14 +106,13 @@ const steerWarning = $derived(
             Acknowledge
           </button>
         {/if}
-        <button
-          type="button"
-          class="btn btn-pill btn-strip btn-warning label-reserve"
-          data-reserve={cancelArm.armed ? 'Cancel' : 'Confirm cancel?'}
+        <ArmedButton
+          label="Cancel"
+          armedLabel="Confirm cancel?"
+          armed={cancelArm.armed}
+          tone="warning"
           onclick={tapCancel}
-        >
-          <span>{cancelArm.armed ? 'Confirm cancel?' : 'Cancel'}</span>
-        </button>
+        />
       </div>
     </div>
     <div class="metrics">

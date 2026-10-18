@@ -1,5 +1,6 @@
 export { default as AccessRecoveryNote } from './AccessRecoveryNote.svelte';
 export { default as AnchoredMenu } from './AnchoredMenu.svelte';
+export { default as ArmedButton } from './ArmedButton.svelte';
 export type { AccessRecoveryState } from './access-recovery';
 export { ArmedRow } from './armed-row.svelte';
 export { default as CustomizeCategory } from './CustomizeCategory.svelte';

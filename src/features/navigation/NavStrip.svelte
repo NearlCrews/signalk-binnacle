@@ -25,7 +25,7 @@ import {
   type UnitsSelection,
 } from '$shared/lib';
 import { steerSide } from '$shared/nav';
-import { AnchoredMenu, ConfirmArm, UnitField } from '$shared/ui';
+import { AnchoredMenu, ArmedButton, ConfirmArm, UnitField } from '$shared/ui';
 import type { RouteProgress } from './route-progress';
 
 interface Props {
@@ -334,16 +334,13 @@ const eta = $derived.by(() => {
           </button>
         </div>
       {/if}
-      <!-- The visible text is the whole label: it swaps to the confirm question when armed, and a
-           fixed aria-label would keep announcing the unarmed name. -->
-      <button
-        type="button"
-        class="btn btn-pill btn-strip btn-warning label-reserve"
-        data-reserve={stopArm.armed ? 'Stop' : 'Confirm stop?'}
+      <ArmedButton
+        label="Stop"
+        armedLabel="Confirm stop?"
+        armed={stopArm.armed}
+        tone="warning"
         onclick={tapStop}
-      >
-        <span>{stopArm.armed ? 'Confirm stop?' : 'Stop'}</span>
-      </button>
+      />
     </div>
     <div class="metrics">
       <div class="data-cell" title="Distance to waypoint{sourceSuffix('distance')}">
