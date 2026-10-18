@@ -58,6 +58,8 @@ All notable changes to Binnacle are documented here. The format follows
 - On a phone held sideways at very large text, set the bar's tiles beside readouts that take two
   rows either way, saving the tiles' row of chart, and keep them on their own row wherever that
   leaves the bar shorter.
+- Set a route leg's forecast wind on one line across the plan instead of wrapping it down a third
+  of the row.
 
 <a id="v0240"></a>
 

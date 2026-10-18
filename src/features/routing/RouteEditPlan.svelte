@@ -221,7 +221,7 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
   </span>
   {#if forecast !== undefined &&
     (forecast.afterDark || forecast.windLine !== undefined || forecast.windUnavailable)}
-    <span class="leg-line leg-line--metrics">
+    <span class="leg-line leg-line--metrics leg-line--forecast">
       {#if forecast.afterDark}
         <span
           class="caps-label sev-warning"
@@ -340,6 +340,12 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
 }
 .leg-line--metrics .num {
   color: var(--text);
+}
+/* A leg's forecast cues (After dark, then the wind line or why it is missing) are sentences, not
+   metrics: each spans all three metric columns, so a wind line reads on one line instead of wrapping
+   down a third of the row. */
+.leg-line--forecast > * {
+  grid-column: 2 / -1;
 }
 /* The route-edit working-plan stats use the global .stat-grid system in app.css. */
 </style>

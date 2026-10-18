@@ -144,6 +144,8 @@ describe('RouteEditPlan planning cues', () => {
     vi.setSystemTime(new Date('2026-08-11T02:00:00Z'));
     const body = renderPlan({ weatherGrid: testGrid('2026-08-11T00:00:00Z') });
     expect(body.match(/Wind 9\.7 kn gust 19\.4 from 000/g)).toHaveLength(2);
+    // The wind line spans the metric columns rather than wrapping down one of them.
+    expect(body.match(/class="leg-line leg-line--metrics leg-line--forecast/g)).toHaveLength(2);
     expect(body).toContain('advisory only');
   });
 
