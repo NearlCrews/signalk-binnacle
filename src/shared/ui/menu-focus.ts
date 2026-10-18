@@ -123,8 +123,8 @@ export interface MenuFocusMachine {
   syncOpen(open: boolean): (() => void) | undefined;
 }
 
-// The stateful half of the machine, shared by the toolbar menus (the overflow menu, the bottom-bar
-// More menu, and the profile switcher) so the open-focus and close-focus protocol and the Tab
+// The stateful half of the machine, shared by the toolbar menus (the overflow menu and the bottom-bar
+// More menu) so the open-focus and close-focus protocol and the Tab
 // redirect cannot drift between them. Surface and trigger are getters because the refs bind after
 // mount and change on open.
 export function createMenuFocusMachine(deps: {

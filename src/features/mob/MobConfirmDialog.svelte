@@ -154,11 +154,13 @@ function confirm(): void {
   font-size: var(--text-md);
 }
 /* The one tap in the app made with wet, gloved, shaking hands: 1.5x the normal touch target. */
+/* The commit takes the MOB key's own solid alarm fill: alarm text on an alarm tint fell below AA in
+   dusk, while the contrast token is made for this fill in every theme. */
 .confirm {
   min-block-size: calc(var(--control-size) * 1.5);
-  color: var(--alarm);
+  color: var(--alarm-contrast);
   border: 2px solid var(--alarm);
-  background: var(--alarm-tint-strong);
+  background: var(--alarm);
   font-weight: 700;
 }
 @media (hover: hover) and (pointer: fine) {

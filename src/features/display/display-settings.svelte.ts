@@ -49,9 +49,9 @@ export interface DisplaySettingsController {
   // The dim layer's opacity, 0 (off) to MAX_DISPLAY_DIM.
   readonly dim: number;
   setDim(value: number): void;
-  // The live theme and a direct choice through the shared theme authority. A phone top bar hides
-  // its theme toggle when another chip needs the room, so Display always offers this path; auto
-  // reads a choice made here as a manual one.
+  // The live theme and a direct choice through the shared theme authority: the full Day, Dusk, and
+  // Night choice, beside the menu's one-tap Night mode; auto reads a choice made here as a manual
+  // one.
   readonly theme: Theme;
   setTheme(theme: Theme): void;
   readonly autoTheme: boolean;

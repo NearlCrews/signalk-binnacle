@@ -59,7 +59,7 @@ describe('StatusCell', () => {
     );
     // The visible words lead the accessible name, then every other problem by its word.
     expect(text(html)).toBe('Status +2 GPS lost , also Muted, Update');
-    expect(html).toContain('badge--warning');
+    expect(html).toContain('badge badge--strong status-more');
   });
 
   it('turns red when the data itself has stopped', () => {

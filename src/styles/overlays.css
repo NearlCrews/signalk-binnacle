@@ -116,7 +116,7 @@ dialog.editor-dialog[open] {
 }
 
 /* The anchored toolbar-menu surface layered on .popover-card, shared by the overflow menu, the
-   bottom-bar More menu, and the profile switcher: the column layout, z-order, width clamp, and
+   bottom-bar More menu, and the Status list: the column layout, z-order, width clamp, and
    grow origin. A consumer declares only its real differences: the width via --menu-width, and the
    origin corner when it opens upward or right-aligned. */
 .menu-surface {

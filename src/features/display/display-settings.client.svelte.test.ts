@@ -212,8 +212,8 @@ describe('createDisplaySettingsController: automatic theme', () => {
 });
 
 describe('createDisplaySettingsController: theme choice', () => {
-  // A phone top bar hides its theme toggle when another chip needs the room, so Display carries a
-  // direct choice through the same theme authority; auto reads it as a manual choice.
+  // Display carries the full direct choice through the same theme authority as the menu's Night
+  // mode; auto reads it as a manual choice.
   it('reads the live theme and sets a choice through the shared theme authority', () => {
     const { controller, setTheme, state } = setup({ mode: 'day', theme: 'day' });
     expect(controller.theme).toBe('day');

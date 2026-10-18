@@ -31,14 +31,6 @@ const toneClass = $derived(
       ? 'status-cell--info'
       : `data-cell--${worst.tone} status-cell--${worst.tone}`,
 );
-const badgeClass = $derived.by(() => {
-  const tone = others[0]?.tone;
-  return tone === 'alarm'
-    ? 'badge--alarm'
-    : tone === 'warning'
-      ? 'badge--warning'
-      : 'badge--accent';
-});
 
 function close(restoreFocus: boolean): void {
   if (!open) return;
@@ -205,7 +197,9 @@ $effect(() => {
   <span class="data-cell-label status-label">
     Status
     {#if others.length > 0}
-      <span class="badge {badgeClass} status-more">+{others.length}</span>
+      <!-- Neutral: the rest sort at or below the shown problem's grade, so the cell already carries
+           the worst of them. -->
+      <span class="badge badge--strong status-more">+{others.length}</span>
     {/if}
   </span>
   <span class="data-cell-value">
@@ -222,17 +216,19 @@ $effect(() => {
 </button>
 
 <style>
-/* The cell's grade owns its whole box: a tint behind the label and value. The word itself names
-   the problem, so the grade never rests on color alone; the list rows carry the icons, which the
-   narrowest column has no room for beside the label and the count. */
+/* The cell's grade is its text color, as every caution cell on the bar, plus a hairline ring in the
+   same color: a tint fill would drop the text below AA in dusk. The word itself names the problem,
+   so the grade never rests on color alone; the list rows carry the icons, which the narrowest
+   column has no room for beside the label and the count. An inset ring changes no box, so the
+   word budget holds. */
 .status-cell {
   border-radius: var(--radius-md);
 }
 .status-cell--warning {
-  background: var(--warning-tint);
+  box-shadow: inset 0 0 0 1px var(--warning);
 }
 .status-cell--alarm {
-  background: var(--alarm-tint);
+  box-shadow: inset 0 0 0 1px var(--alarm);
 }
 .status-cell--info,
 .status-cell--info .word {

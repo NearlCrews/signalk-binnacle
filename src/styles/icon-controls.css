@@ -1,4 +1,4 @@
-/* The chrome icon controls: the transparent icon-only list and panel buttons, the round top-bar icon
+/* The chrome icon controls: the transparent icon-only list and panel buttons, the round floating icon
    pill, and the lit "engaged" .is-on state. This module is imported AFTER buttons.css so .is-on wins
    the same-specificity tie over the .btn, .btn-compact, and .icon-pill bases it lights up. */
 
@@ -59,10 +59,9 @@
   display: none;
 }
 
-/* A round chrome icon button on the raised surface with an accent icon, shared by the top-bar
-   controls (the menu trigger and the theme toggle) so they hover and press alike. On the bar it sits
-   flat beside the .btn-pill chips; one floating over the chart adds .icon-pill--float for the
-   overlay shadow the map controls carry. */
+/* A round chrome icon button on the raised surface with an accent icon, floating over a map (the
+   off-screen vessel arrow and the forecast map's layer trigger) so they hover and press alike;
+   .icon-pill--float adds the overlay shadow the map controls carry. */
 .icon-pill {
   display: inline-flex;
   flex: none;

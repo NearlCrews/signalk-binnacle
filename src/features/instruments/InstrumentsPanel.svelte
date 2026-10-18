@@ -18,7 +18,7 @@ interface Props {
   onTrendFocusRestored?: () => void;
   fullscreen?: boolean;
   // The emergency action the shell injects (the MOB trigger): while the panel is a full-screen
-  // modal, aria-modal removes the topbar from the accessibility tree, so the trigger must live
+  // modal, aria-modal removes the status bar from the accessibility tree, so the trigger must live
   // inside the dialog subtree. Injected rather than imported so instruments never reaches into
   // the mob feature.
   emergencyAction?: Snippet;

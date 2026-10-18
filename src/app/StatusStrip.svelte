@@ -192,7 +192,7 @@ const connTitle = $derived(connectionTitle || connectionLabel);
 // explanation.
 // A fallen-back rotation is already showing north up and resumes on its own when its data returns,
 // so a tap on its caution-styled cell explains, like every other caution cell, rather than
-// discarding the chosen mode; choosing north up for good is the caution line's explicit action.
+// discarding the chosen mode; choosing north up for good is the Status list's explicit action.
 function explainOrientation(): void {
   if (orientation) chipNote.show(`${orientation.label}. ${ORIENTATION_RESUMES}`, CHIP_NOTE_MS);
 }
