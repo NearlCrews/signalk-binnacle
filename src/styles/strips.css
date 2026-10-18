@@ -151,3 +151,23 @@
   font-weight: 600;
   white-space: nowrap;
 }
+/* The status bar's two ends, the menu and MOB: full-height tiles, an icon over a one-line label,
+   centered as a pair like the pinned tiles. A slim bar hides the label and keeps the icon at one
+   touch target. Compound with .btn so it outranks the .btn base's flex display. */
+.btn.bar-bookend {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: center;
+  justify-items: center;
+  row-gap: var(--space-1);
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: var(--target-floor);
+  min-block-size: var(--control-size);
+  padding: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.bar-bookend-label {
+  line-height: 1;
+}

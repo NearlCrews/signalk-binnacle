@@ -15,7 +15,7 @@ import Layers from '@lucide/svelte/icons/layers';
 import LocateFixed from '@lucide/svelte/icons/locate-fixed';
 import Lock from '@lucide/svelte/icons/lock';
 import MapPin from '@lucide/svelte/icons/map-pin';
-import Menu from '@lucide/svelte/icons/menu';
+import Moon from '@lucide/svelte/icons/moon';
 import Navigation from '@lucide/svelte/icons/navigation';
 import Navigation2 from '@lucide/svelte/icons/navigation-2';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
@@ -27,7 +27,6 @@ import Ship from '@lucide/svelte/icons/ship';
 import Spline from '@lucide/svelte/icons/spline';
 import SunMoon from '@lucide/svelte/icons/sun-moon';
 import UserCog from '@lucide/svelte/icons/user-cog';
-import VolumeX from '@lucide/svelte/icons/volume-x';
 import Waves from '@lucide/svelte/icons/waves';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { onDestroy, onMount, untrack } from 'svelte';
@@ -106,7 +105,8 @@ import {
   AppMenu,
   DEFAULT_PINNED,
   type MenuItem,
-  reorderPinned,
+  pinnedIdsCodec,
+  reorderShownPinned,
   resolvePinned,
   togglePinned,
 } from '$features/menu';
@@ -136,11 +136,9 @@ import {
   downloadProfileJson,
   type ImportedProfile,
   loadProfilesPanel,
-  ProfileSwitcher,
 } from '$features/profiles';
 import { createRegionZonesStore } from '$features/regions-overlay';
 import { createRouteController } from '$features/routing';
-import { ThemeToggle } from '$features/theme-toggle';
 import {
   createTidesController,
   createTidesLoader,
@@ -247,14 +245,16 @@ import {
   ErrorBoundary,
   LazyPanelState,
   LoadNote,
+  nightToggleTarget,
   PanelHeader,
   type PanelId,
+  THEMES,
   type Theme,
   trapFocus,
 } from '$shared/ui';
 import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
-import ChartLockerStatus from './ChartLockerStatus.svelte';
+import { chartLockerSummary } from './chart-locker-status';
 import { resolveOrientation } from './chart-orientation';
 import { describeConnection } from './connection-description';
 import { createFollowController } from './follow-controller.svelte';
@@ -266,7 +266,6 @@ import StatusStrip from './StatusStrip.svelte';
 import { createSafetyController } from './safety-controller.svelte';
 import { soundOffState, watchArmed } from './sound-off';
 import { createStreamController } from './stream-controller.svelte';
-import { yieldToFit } from './yield-to-fit';
 
 // serverOrigin reads location, fixed for the page lifetime: capture once, not at every call site.
 const origin = serverOrigin();
@@ -606,6 +605,9 @@ let instrumentsFullScreen = $state(false);
 // The safety rail's measured clearance, bound out of PlotterView so App-level fixed overlays (the
 // full-screen dock) can reserve the space the rail floats over.
 let safetyRailClearance = $state('0px');
+// The status bar's measured height: the menu sheet, the Status list, and every menu's backdrop stop
+// at its top edge, so the bar and MOB stay live under anything opened above it.
+let barBlockSize = $state(0);
 const openPanel = (panel: PanelId): void => {
   if (panel === 'help') helpTarget = undefined;
   if (instrumentsFullScreen && instruments.open) instruments.setOpen(false);
@@ -712,7 +714,18 @@ let hoveredPoi = $state<Poi | undefined>();
 let updateReady = $state(false);
 const pwa = registerPwa(() => (updateReady = true));
 
-const theme = createThemeController((next) => recolorMap?.(next, chartPaintVariant));
+// The lighter theme the Night mode item returns to, remembered across reloads so leaving night
+// never jumps to day unless day was last. Device-local, not part of a profile.
+const lastLightTheme = new PersistedValue<Theme>(
+  binnacleStorageKey('lastLightTheme'),
+  'dusk',
+  undefined,
+  enumPersistedCodec(THEMES),
+);
+const theme = createThemeController((next) => {
+  if (next !== 'night-red') lastLightTheme.set(next);
+  recolorMap?.(next, chartPaintVariant);
+});
 
 // The display cluster: the true-black dim layer, the opt-in automatic day and night theme (from
 // environment.mode with a solar fallback), and the interface text scale. The controller drives the
@@ -778,7 +791,7 @@ const pinnedActions = new PersistedValue<string[]>(
   binnacleStorageKey('pinnedActions'),
   [...DEFAULT_PINNED],
   undefined,
-  stringArrayPersistedCodec({ maxItems: 64, maxLength: 128 }),
+  pinnedIdsCodec(),
 );
 
 // The instrument dock: tile selection rides profiles through this PersistedValue (the bindings
@@ -866,8 +879,16 @@ function backFromTrendsPanel(): void {
 const onTogglePin = (id: string): void => {
   pinnedActions.set(togglePinned(pinnedActions.value, id));
 };
+// The editor counts slots on the bar as shown, so an id the bar cannot show never shifts them.
 const onReorderPinned = (id: string, slot: number): void => {
-  pinnedActions.set(reorderPinned(pinnedActions.value, id, slot));
+  pinnedActions.set(
+    reorderShownPinned(
+      pinnedActions.value,
+      resolvedPinned.map((item) => item.id),
+      id,
+      slot,
+    ),
+  );
 };
 const onResetPinned = (): void => {
   pinnedActions.set([...DEFAULT_PINNED]);
@@ -1390,6 +1411,18 @@ const marineRadar = createMarineRadarController({
 // (from the gear the layers panel is still behind it, so going to the menu would strand the navigator).
 let radarControlsOpen = $state(false);
 let radarOpenedFrom = $state<'menu' | 'layers'>('menu');
+// The Status list's doors to the forecast and the radar controls: they open, never toggle shut.
+function openForecast(): void {
+  if (weatherPanelOpen) return;
+  if (instrumentsFullScreen) instruments.setOpen(false);
+  weatherPanelOpen = true;
+}
+function openRadarControls(): void {
+  if (radarControlsOpen) return;
+  radarOpenedFrom = 'menu';
+  if (instrumentsFullScreen) instruments.setOpen(false);
+  radarControlsOpen = true;
+}
 let radarDraftDirty = $state(false);
 let radarPanelRequest = $state<'close' | 'instruments' | undefined>();
 
@@ -1671,6 +1704,11 @@ $effect(() => {
   if (!emergencySafetyActive || !instrumentsFullScreen) return;
   if (untrack(() => instruments.open)) untrack(() => instruments.setOpen(false));
 });
+// The menu opens above the status bar, where the safety rail rises: an alarm closes it rather than
+// let it cover the alarm's card. The Status list and the bar's More menu close the same way.
+$effect(() => {
+  if (emergencySafetyActive) untrack(() => (menuOpen = false));
+});
 
 // The region-aware chart offer: in US waters the app already holds everything needed to turn a
 // reference-map view into a real chart, and nothing points at it. One dismissible banner, once per
@@ -1859,6 +1897,11 @@ const menuItems = $derived<MenuItem[]>([
     id: 'regions',
     label: 'Offline charts',
     shortLabel: 'Offline',
+    // What Chart Locker's health poll knows, the amount cached or the access state, while it is
+    // installed; its trouble also reaches the Status cell.
+    sublabel: companionStatus.present
+      ? chartLockerSummary(companionStatus.state, companionStatus.cacheBytes).value
+      : undefined,
     icon: DownloadCloud,
     group: 'Chart',
     unavailableHint:
@@ -2149,28 +2192,32 @@ const menuItems = $derived<MenuItem[]>([
     pressed: activePanel === 'display',
     onSelect: () => togglePanel('display'),
   },
+  // Night in one tap from the menu or the bar, never through dusk; Display keeps the full Day, Dusk,
+  // and Night choice and the automatic theme.
+  {
+    id: 'night',
+    label: 'Night mode',
+    shortLabel: 'Night',
+    icon: Moon,
+    group: 'Settings',
+    pressed: theme.theme === 'night-red',
+    onSelect: () => theme.set(nightToggleTarget(theme.theme, lastLightTheme.value)),
+  },
   {
     id: 'profiles',
     label: 'Profiles',
-    // Units, sync, and device privacy all live inside the profiles panel, and a navigator looking
-    // for feet instead of meters scans Settings for the word Units, not for Profiles.
-    sublabel: 'Units, sync, and privacy',
+    // The active profile, named where the switch happens; with none active, the reminder that units,
+    // sync, and device privacy live here, for a navigator scanning Settings for the word Units. A
+    // profile changed at another station counts as one waiting update.
+    sublabel: profileStore.active
+      ? `Active: ${profileStore.active.name}`
+      : 'Units, sync, and privacy',
+    count: profileStore.remoteUpdateAvailable ? 1 : 0,
+    countNoun: 'profile update',
     icon: UserCog,
     group: 'Settings',
     pressed: activePanel === 'profiles',
     onSelect: () => togglePanel('profiles'),
-  },
-  // The bottom bar's own opener. barOnly keeps it out of the launcher grid it opens, except while
-  // customizing, where tapping a tile is the only way to pin or unpin. Pinned by default: on a
-  // phone the topbar hamburger is a cross-screen reach, and the sheet it opens is at the thumb.
-  {
-    id: 'menu',
-    label: 'Menu',
-    icon: Menu,
-    group: 'Settings',
-    barOnly: true,
-    pressed: menuOpen,
-    onSelect: () => (menuOpen = !menuOpen),
   },
   {
     id: 'help',
@@ -3095,91 +3142,18 @@ const plotterActions = {
 
 <!-- The measured safety-rail clearance rides the shell root so App-level overlays the rail can
      float over (the full-screen instrument dock) inherit it; 0px while no alerts are up. -->
-<main class="binnacle-shell" style:--rail-clearance={safetyRailClearance}>
+<main
+  class="binnacle-shell"
+  style:--rail-clearance={safetyRailClearance}
+  style:--bar-block-size={`${barBlockSize}px`}
+>
   <LiveRegions
     safety={safetyAnnunciator.assertive}
     safetyQueue={safetyAnnunciator.polite}
     mute={muteAlert}
     companion={companionAnnounce}
   />
-  <header class="topbar">
-    <div class="topbar-start">
-      <AppMenu
-        items={menuItems}
-        showTrigger={!pinnedActions.value.includes('menu')}
-        open={menuOpen}
-        onOpenChange={(next) => (menuOpen = next)}
-        pinnedIds={pinnedActions.value}
-        editing={menuEditing}
-        onEditingChange={(next) => (menuEditing = next)}
-        {onTogglePin}
-        {onReorderPinned}
-        {onResetPinned}
-      />
-      <h1 class="brand visually-hidden">Binnacle Chartplotter</h1>
-    </div>
-    <MobButton
-      {mob}
-      onTrigger={mobController.onTrigger}
-      onLocate={flyToPosition}
-      writeBlocked={auth.writeBlocked}
-    />
-    <!-- Chips give way whole when the flank runs out of room: Chart Locker first, then the profile,
-         the theme, and Update. The collision mute never yields. -->
-    <div class="topbar-actions" use:yieldToFit>
-      {#if collisionMute.active}
-        <span class="topbar-action topbar-action--collision">
-          <button
-            type="button"
-            class="btn btn-warning btn-pill"
-            aria-pressed="true"
-            aria-label="Collision alarm muted, {muteRemainingMin} minutes left, tap to unmute"
-            title="Collision alarm muted, {muteRemainingMin} min left, tap to unmute"
-            onclick={() => collisionMute.unmute()}
-          >
-            <VolumeX size={16} aria-hidden="true" />
-            <span class="collision-label">Muted {muteRemainingMin}min</span>
-          </button>
-        </span>
-      {/if}
-      {#if updateReady}
-        <span class="topbar-action topbar-action--update" data-yield="1">
-          <button
-            type="button"
-            class="btn btn-primary btn-pill"
-            onclick={() => {
-              updateReady = false;
-              pwa.update();
-            }}
-          >
-            Update
-          </button>
-        </span>
-      {/if}
-      <span class="topbar-action topbar-action--companion" data-yield="4">
-        <ChartLockerStatus
-          present={companionStatus.present}
-          state={companionStatus.state}
-          cacheBytes={companionStatus.cacheBytes}
-          accessUrl={chartLockerAccessUrl}
-          onOpen={() => openPanel('regions')}
-          onRetry={() => void companionStatus.refresh()}
-        />
-      </span>
-      <span class="topbar-action topbar-action--profile" data-yield="3">
-        <ProfileSwitcher
-          active={profileStore.active}
-          profiles={profileStore.profiles}
-          hasUpdate={profileStore.remoteUpdateAvailable}
-          onSelect={onApplyProfile}
-          onManage={() => openPanel('profiles')}
-        />
-      </span>
-      <span class="topbar-action topbar-action--theme" data-yield="2"
-        ><ThemeToggle controller={theme} /></span
-      >
-    </div>
-  </header>
+  <h1 class="brand visually-hidden">Binnacle Chartplotter</h1>
   <PlotterView
     emergencyAction={instrumentsMobAction}
     services={plotterServices}
@@ -3354,7 +3328,7 @@ const plotterActions = {
   {/snippet}
 
   {#snippet instrumentsMobAction()}
-    <!-- The same MOB store and trigger flow as the topbar button, rendered inside the modal
+    <!-- The same MOB store and trigger flow as the status bar's MOB, rendered inside the modal
          dialog subtree so full-screen Instruments always carries a reachable MOB initiation.
          Fly-to-mark closes the dock first, or the chart movement happens invisibly under it. -->
     <MobButton
@@ -3399,7 +3373,37 @@ const plotterActions = {
     {/await}
   {/if}
 
+  {#snippet barMenu(
+    slim: boolean,
+  )}
+    <AppMenu
+      items={menuItems}
+      labelHidden={slim}
+      open={menuOpen}
+      onOpenChange={(next) => (menuOpen = next)}
+      pinnedIds={pinnedActions.value}
+      editing={menuEditing}
+      onEditingChange={(next) => (menuEditing = next)}
+      {onTogglePin}
+      {onReorderPinned}
+      {onResetPinned}
+    />
+  {/snippet}
+  {#snippet barMob(
+    slim: boolean,
+  )}
+    <MobButton
+      {mob}
+      variant="bookend"
+      labelHidden={slim}
+      onTrigger={mobController.onTrigger}
+      onLocate={flyToPosition}
+      writeBlocked={auth.writeBlocked}
+    />
+  {/snippet}
   <StatusStrip
+    start={barMenu}
+    end={barMob}
     {connectionLabel}
     {connectionTitle}
     {streamError}
@@ -3439,6 +3443,23 @@ const plotterActions = {
     {clock}
     onOpenHelp={() => openHelpPanel('gps')}
     onOpenAnchor={() => openPanel('anchor')}
+    collisionMuteMinutes={collisionMute.active ? muteRemainingMin : undefined}
+    onUnmuteCollision={() => collisionMute.unmute()}
+    {updateReady}
+    onReload={() => {
+      updateReady = false;
+      pwa.update();
+    }}
+    chartLocker={companionStatus.present
+      ? { state: companionStatus.state, accessUrl: chartLockerAccessUrl }
+      : undefined}
+    onRetryChartLocker={() => void companionStatus.refresh()}
+    onOpenOfflineCharts={() => openPanel('regions')}
+    onOpenWeather={openForecast}
+    onOpenRadar={openRadarControls}
+    onOpenAis={() => openPanel('ais')}
+    emergency={emergencySafetyActive}
+    onBarHeight={(height) => (barBlockSize = height)}
     onReconnect={() => {
       // On a fixed helm display no focus or visibility event ever re-probes an exhausted auth
       // poll, so the one visible retry action must also revalidate access, or it silently no-ops
@@ -3562,10 +3583,12 @@ const plotterActions = {
 }
 .binnacle-shell {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  /* The chart over the status bar, the app's only chrome. */
+  grid-template-rows: minmax(0, 1fr) auto;
   /* The second column is the instrument dock; it collapses to zero when the dock is closed. Every
-     in-flow child is placed explicitly, because auto-placement would flow the topbar into the dock
-     column. The toggle is instant by design: animating the track would resize the map per frame. */
+     in-flow child is placed explicitly, because auto-placement would flow the status bar into the
+     dock column. The toggle is instant by design: animating the track would resize the map per
+     frame. */
   grid-template-columns: 1fr auto;
   /* #app is this component's sole mount target (see main.ts) and already carries the dvh-tracked
      (with a vh fallback) block-size, so inheriting it here keeps that fallback in one place. */
@@ -3576,86 +3599,21 @@ const plotterActions = {
   background: var(--surface);
   color: var(--text);
 }
-/* Three columns so the MOB button sits dead center regardless of how wide the brand and the
-   action cluster are; the flanks are 1fr each so the center cannot drift. Includes Window Controls
-   Overlay (WCO) support to merge seamlessly into native PWA desktop title bars. */
-.topbar {
-  grid-row: 1;
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-2);
-
-  /* One --space-1 above and below the 44px controls at every width, and the chrome gutter at each
-     inline edge. */
-  padding-block: var(--space-1);
-
-  /* Window Controls Overlay alignment. A landscape phone also lays out with these wide rules, so
-     the inline edges reserve the notch side as well. */
-  padding-block-start: max(var(--space-1), env(titlebar-area-y, 0px));
-  min-block-size: max(var(--control-size), env(titlebar-area-height, 0px));
-  padding-inline-start: max(var(--chrome-inset-start), env(titlebar-area-x, 0px));
-  padding-inline-end: calc(100% - env(titlebar-area-width, 100%) + var(--chrome-inset-end));
-
-  border-block-end: 1px solid var(--border);
-
-  /* Draggable header in installed PWA windows; only the -webkit- form is implemented anywhere. */
-  -webkit-app-region: drag;
-}
-.topbar > * {
-  /* Interactive children stay clickable inside the drag region. */
-  -webkit-app-region: no-drag;
-}
-.topbar-start {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  min-inline-size: 0;
-}
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  min-inline-size: 0;
-}
-.topbar-action {
-  display: contents;
-}
-.topbar-action > :global(*) {
-  flex: none;
-}
-.topbar-action:global(.is-yielded) {
-  display: none;
-}
-@media (max-width: 600px) {
-  .topbar {
-    gap: var(--space-1);
-  }
-  .topbar-actions {
-    gap: var(--space-1);
-  }
-  .topbar-action--companion,
-  .topbar-action--profile,
-  .collision-label {
-    display: none;
-  }
-}
 /* PlotterView's root is the chart host; place it explicitly like every other shell child, so
    auto-placement can never drift it into the dock column. */
 .binnacle-shell > :global(.chart-host) {
-  grid-row: 2;
+  grid-row: 1;
   grid-column: 1;
 }
 .binnacle-shell > :global(.instruments) {
-  grid-row: 2;
+  grid-row: 1;
   grid-column: 2;
   display: flex;
   flex-direction: column;
   inline-size: clamp(20rem, 28vw, 24rem);
-  /* Docked on the trailing edge of a landscape phone wider than 900px, so it clears the notch. */
+  /* Docked on the trailing edge of a landscape phone wider than 900px, so it clears the notch, and
+     reaching the top of the screen, so it clears a top cutout. */
+  padding-block-start: var(--chrome-inset-top);
   padding-inline-end: env(safe-area-inset-right, 0px);
   border-inline-start: 1px solid var(--border);
   /* The dock scrolls its own tiles; without this a long tile list would stretch the shell row. */
@@ -3668,13 +3626,14 @@ const plotterActions = {
     z-index: var(--z-panel);
     inline-size: auto;
     /* Full screen on a landscape phone, so both inline edges clear the notch. */
+    padding-block-start: var(--chrome-inset-top);
     padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
     background: var(--surface);
   }
 }
 /* The strip's root lives inside the StatusStrip component, so the span reaches it with :global. */
 .binnacle-shell :global(.status-strip) {
-  grid-row: 3;
+  grid-row: 2;
   grid-column: 1 / -1;
 }
 </style>

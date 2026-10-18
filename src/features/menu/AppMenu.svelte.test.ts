@@ -73,7 +73,7 @@ describe('AppMenu group order', () => {
       props: {
         items: [
           item('profiles', { group: 'Settings' }),
-          item('menu', { group: 'Settings', barOnly: true }),
+          item('night', { group: 'Settings' }),
           item('help', { group: 'Settings' }),
         ],
         open: true,
@@ -87,39 +87,22 @@ describe('AppMenu group order', () => {
   });
 });
 
-describe('AppMenu bar-only actions', () => {
-  function renderWithEditing(editing: boolean): string {
-    return render(AppMenu, {
-      props: {
-        items: [
-          item('menu', { barOnly: true, group: 'Chart' }),
-          item('center', { group: 'Chart' }),
-        ],
-        open: true,
-        onOpenChange: () => {},
-        editing,
-        pinnedIds: ['menu'],
-      },
-    }).body;
-  }
-
-  it('keeps a bar-only action out of the launcher it opens, but pinnable while customizing', () => {
-    const browsing = renderWithEditing(false);
-    expect(browsing).toContain('>center<');
-    expect(browsing).not.toContain('>menu<');
-    // Tapping a tile is the only pin control, so the tile must exist in edit mode.
-    expect(renderWithEditing(true)).toContain('>menu<');
-  });
-
-  it('drops the topbar trigger when the opener is pinned, so one control is named Menu', () => {
-    const withTrigger = render(AppMenu, {
+describe('AppMenu bar end', () => {
+  it('renders one control named Menu, the full-height end of the status bar', () => {
+    const body = render(AppMenu, {
       props: { items: [], open: false, onOpenChange: () => {} },
     }).body;
-    expect(withTrigger).toContain('aria-label="Menu"');
-    const without = render(AppMenu, {
-      props: { items: [], open: false, onOpenChange: () => {}, showTrigger: false },
+    expect(body.match(/aria-label="Menu"/g)).toHaveLength(1);
+    expect(body).toContain('bar-bookend');
+    expect(body).toContain('data-menu-opener');
+    expect(body).toMatch(/<span class="bar-bookend-label[^"]*">Menu<\/span>/);
+  });
+
+  it('keeps the label for assistive tech when the bar is slim', () => {
+    const body = render(AppMenu, {
+      props: { items: [], open: false, onOpenChange: () => {}, labelHidden: true },
     }).body;
-    expect(without).not.toContain('aria-label="Menu"');
+    expect(body).toMatch(/<span class="bar-bookend-label visually-hidden[^"]*">Menu<\/span>/);
   });
 });
 

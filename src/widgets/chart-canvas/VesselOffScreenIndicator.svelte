@@ -17,6 +17,27 @@ const { map, position, positionStale = false, onCenter }: Props = $props();
 // Keeps the arrow's whole hit target inside the canvas, never clipped at the edge.
 const EDGE_INSET = 28;
 
+// The chart reaches the top of the screen, where a status bar or cutout may overlay it and the
+// access banner may sit: the arrow keeps clear of both. The inset is an env() expression, read
+// through a probe inside the chart; the banner's height is published on the chart host.
+function topInset(): number {
+  const probe = document.createElement('div');
+  probe.style.cssText =
+    'position:absolute;visibility:hidden;padding-block-start:var(--chrome-inset-top)';
+  map.getContainer().append(probe);
+  const inset = Number.parseFloat(getComputedStyle(probe).paddingBlockStart) || 0;
+  probe.remove();
+  return inset;
+}
+let insetTop = 0;
+function bannerHeight(): number {
+  return (
+    Number.parseFloat(
+      getComputedStyle(map.getContainer()).getPropertyValue('--auth-banner-height'),
+    ) || 0
+  );
+}
+
 let visible = $state(false);
 let x = $state(0);
 let y = $state(0);
@@ -38,7 +59,7 @@ function recompute(): void {
   // Clamp the true (possibly far off-canvas) point to the inset canvas rectangle, projected along
   // the line from center to that point, so the arrow sits at the edge closest to the vessel.
   const halfW = centerX - EDGE_INSET;
-  const halfH = centerY - EDGE_INSET;
+  const halfH = centerY - EDGE_INSET - (dy < 0 ? insetTop + bannerHeight() : 0);
   const scale = Math.min(
     dx !== 0 ? Math.abs(halfW / dx) : Number.POSITIVE_INFINITY,
     dy !== 0 ? Math.abs(halfH / dy) : Number.POSITIVE_INFINITY,
@@ -52,8 +73,18 @@ function recompute(): void {
 // once; recompute also runs on every repaint (pan and zoom), matching the cadence overlay-tick.ts
 // already drives every GL-layer overlay from.
 $effect(() => {
+  const measureTop = (): void => {
+    insetTop = topInset();
+  };
+  measureTop();
+  // The inset changes with rotation, which resizes the chart.
+  const observer = new ResizeObserver(measureTop);
+  observer.observe(map.getContainer());
   map.on('render', recompute);
-  return () => map.off('render', recompute);
+  return () => {
+    observer.disconnect();
+    map.off('render', recompute);
+  };
 });
 
 // Vessel position updates over the WebSocket independent of any camera move, so it needs its own

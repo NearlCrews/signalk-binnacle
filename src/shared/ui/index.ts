@@ -54,6 +54,7 @@ export type { Theme } from './theme.svelte';
 export {
   createThemeController,
   isTheme,
+  nightToggleTarget,
   THEME_LABELS,
   THEMES,
   ThemeController,

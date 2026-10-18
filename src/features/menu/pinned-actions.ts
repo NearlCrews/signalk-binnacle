@@ -1,11 +1,35 @@
+import { type PersistedCodec, stringArrayPersistedCodec } from '$shared/settings';
 import type { MenuItem } from './menu-item';
 
-// The bar's default pinned set: the Menu opener, Center, Follow, and AIS. The single source of the
-// default, imported by the composition root for the persisted-value fallback. Menu leads because
-// the topbar hamburger is a cross-screen reach on a phone, where every unpinned journey starts;
-// AIS holds the fourth slot so one Safety action is thumb-reachable out of the box, carrying its
-// live collision-risk count. Charts and Instruments stay one tap away inside the menu.
-export const DEFAULT_PINNED: readonly string[] = ['menu', 'center', 'follow', 'ais'];
+// The bar's default pinned set: Center, Follow, Charts, and AIS. The single source of the default,
+// imported by the composition root for the persisted-value fallback. The menu itself is always the
+// bar's leading end, so it is never a pin; AIS holds the fourth slot so one Safety action is
+// thumb-reachable out of the box, carrying its live collision-risk count.
+export const DEFAULT_PINNED: readonly string[] = ['center', 'follow', 'layers', 'ais'];
+
+// Ids that were once pinnable and no longer are: the menu opener, now the bar's own end.
+const RETIRED_PINNED_IDS: ReadonlySet<string> = new Set(['menu']);
+
+export function cleanPinned(ids: readonly string[]): string[] {
+  return ids.filter((id) => !RETIRED_PINNED_IDS.has(id));
+}
+
+// The persisted pin list: bounded strings, with a retired id dropped on read (rewritten once in the
+// current shape) and on write, so a stored or profile-applied list never carries one forward.
+export function pinnedIdsCodec(): PersistedCodec<string[]> {
+  const strings = stringArrayPersistedCodec({ maxItems: 64, maxLength: 128 });
+  return {
+    decode(value) {
+      const result = strings.decode(value);
+      if (result.state === 'invalid') return result;
+      const cleaned = cleanPinned(result.value);
+      return cleaned.length === result.value.length
+        ? result
+        : { state: 'migrated', value: cleaned };
+    },
+    encode: (ids) => cleanPinned(ids),
+  };
+}
 
 // The pinned actions in stored order, so toolbar customization controls both membership and position.
 // Unknown ids are skipped for forward and backward compatibility, and duplicates render once.
@@ -66,6 +90,22 @@ export function splitBarActions(
 // Add an id when absent, remove it when present, returning a fresh array.
 export function togglePinned(ids: string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+}
+
+// Move one shown pin to a slot counted on the bar as shown, rewriting the stored list in place: an
+// id the bar cannot show (from a newer version's profile) keeps its stored position and never
+// shifts the slots a reorder counts.
+export function reorderShownPinned(
+  stored: readonly string[],
+  shown: readonly string[],
+  id: string,
+  slot: number,
+): string[] {
+  const next = reorderPinned([...shown], id, slot);
+  const visible = new Set(shown);
+  const unique = stored.filter((x, index) => stored.indexOf(x) === index);
+  let at = 0;
+  return unique.map((x) => (visible.has(x) ? (next[at++] ?? x) : x));
 }
 
 // Move one pinned id to an insertion slot, preserving the rest of the stored toolbar order.

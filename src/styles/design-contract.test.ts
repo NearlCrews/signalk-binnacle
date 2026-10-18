@@ -139,16 +139,6 @@ describe('design contract: one visually-hidden rule', () => {
     const copies = hits(/clip-path:\s*inset\(50%\)/);
     expect(copies.filter((path) => path !== '/src/styles/a11y.css')).toEqual([]);
   });
-
-  it('keeps the top bar aligned with the installed app title bar', () => {
-    const app = sources['/src/app/App.svelte'] ?? '';
-    // The unindented rule is the base one; the phone block nests its own .topbar rule.
-    const base = app.match(/\n\.topbar \{([^}]*)\}/)?.[1] ?? '';
-    expect(base).toContain('padding-block-start: max(var(--space-1), env(titlebar-area-y, 0px));');
-    expect(base).toContain(
-      'min-block-size: max(var(--control-size), env(titlebar-area-height, 0px));',
-    );
-  });
 });
 
 describe('design contract: reading rhythm', () => {
@@ -227,19 +217,19 @@ describe('design contract: helm readouts', () => {
     expect(strip).not.toContain('--text-readout');
   });
 
-  it('derives the helm row from fourteen bar columns and the two gutters', () => {
+  it('derives the helm row from seventeen bar columns', () => {
     const rem = (pattern: RegExp, text: string): number => {
       const match = text.match(pattern);
       if (!match?.[1]) throw new Error(`No ${pattern}`);
       return Number.parseFloat(match[1]);
     };
     const column = rem(/--data-cell-min: ([\d.]+)rem;/, tokens);
-    const gutter = rem(/\.status-strip \{[^}]*--strip-gutter: ([\d.]+)rem;/, strip);
+    // The container is the bar's content box, so its padding is not part of the sum.
     const row = rem(
-      /@container status-strip \(min-width: ([\d.]+)rem\) \{\s*\.strip-grid \{\s*grid-template-columns: var\(--strip-gutter\) repeat\(14, minmax\(0, 1fr\)\) var\(--strip-gutter\);/,
+      /@container status-strip \(min-width: ([\d.]+)rem\) \{\s*\.strip-grid \{\s*grid-template-columns: repeat\(17, minmax\(0, 1fr\)\);/,
       strip,
     );
-    expect(row).toBeCloseTo(14 * column + 2 * gutter, 5);
+    expect(row).toBeCloseTo(17 * column, 5);
   });
 
   it('marks stale numerals by shape in every theme, not by color alone', () => {
@@ -280,8 +270,11 @@ describe('design contract: layout breakpoints', () => {
     expect(landscape).toBeGreaterThan(strip.indexOf('@media (max-width: 900px) {'));
     // One row only while three readout columns fit beside the tiles, in rem, so very large text
     // drops the tiles back onto their own row instead of squeezing the readouts into one column.
-    expect(strip.slice(landscape)).toMatch(
-      /@container status-strip \(min-width: \d+rem\) \{\s*\.strip-grid \{\s*grid-template-columns: var\(--strip-gutter\) minmax\(0, 1fr\) auto;/,
+    expect(strip).toContain(
+      'const sideways = $derived(landscapeShort.matches && barRem >= SIDEWAYS_ROW_REM);',
+    );
+    expect(strip).toMatch(
+      /\.strip-grid\.sideways \{\s*grid-template-columns:\s*calc\(var\(--target-floor\) \+ var\(--space-1\)\)\s*minmax\(0, 1fr\)\s*auto/,
     );
     const pinnedLandscape = pinned.indexOf(`@media ${LANDSCAPE} {`);
     // The tiles' sideways rule follows their base rule, so it wins the cascade.

@@ -13,9 +13,20 @@ interface Props {
   onTrigger: (mark: MobMark | undefined) => void;
   // Fly the chart to the existing mark.
   onLocate: (position: LatLon) => void;
+  // The status bar's trailing end (a full-height tile, icon over label) or a pill in a panel header.
+  variant?: 'pill' | 'bookend';
+  // The bar is slim and its ends show only their icons; the label stays for assistive tech.
+  labelHidden?: boolean;
 }
 
-const { mob, writeBlocked = false, onTrigger, onLocate }: Props = $props();
+const {
+  mob,
+  writeBlocked = false,
+  onTrigger,
+  onLocate,
+  variant = 'pill',
+  labelHidden = false,
+}: Props = $props();
 
 // The MOB button must never trigger on a stray tap, so marking takes two: the button opens a
 // centered confirm dialog, and only its Mark button commits. The fix is snapshotted at PRESS time,
@@ -65,7 +76,9 @@ function onTimeout(): void {
 
 <button
   type="button"
-  class="btn btn-pill mob-btn"
+  class="btn mob-btn"
+  class:btn-pill={variant === 'pill'}
+  class:bar-bookend={variant === 'bookend'}
   class:is-on={mob.active}
   aria-pressed={mob.active}
   aria-haspopup={mob.position ? undefined : 'dialog'}
@@ -75,8 +88,12 @@ function onTimeout(): void {
     : 'Mark man overboard at the boat position (asks to confirm)'}
   onclick={onButton}
 >
-  <LifeBuoy size={16} aria-hidden="true" />
-  MOB
+  <LifeBuoy size={variant === 'bookend' ? 24 : 16} aria-hidden="true" />
+  {#if variant === 'bookend'}
+    <span class="bar-bookend-label" class:visually-hidden={labelHidden}>MOB</span>
+  {:else}
+    MOB
+  {/if}
 </button>
 {#if confirming}
   <MobConfirmDialog mark={pressMark} {writeBlocked} {onConfirm} {onCancel} {onTimeout} />

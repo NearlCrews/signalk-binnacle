@@ -13,12 +13,11 @@ describe('launcher opener focus', () => {
       fallback.setAttribute('data-menu-opener', '');
       fallback.textContent = 'More';
       const opener = document.createElement('button');
-      opener.textContent = 'Pinned Menu';
+      opener.textContent = 'Back to menu';
       group.append(fallback, opener);
       document.body.append(group, target);
       const props = $state<ComponentProps<typeof AppMenu>>({
         items: [{ id: 'help', label: 'Help', onSelect: () => {} }],
-        showTrigger: false,
         open: false,
         onOpenChange: (open) => {
           props.open = open;

@@ -10,7 +10,7 @@ const THEME_COLORS: Record<Theme, string> = {
   'night-red': '#000000',
 };
 
-// The short name every theme control shows: the toolbar toggle adds "theme", Display shows it bare.
+// The short name every theme control shows, as Display's Day, Dusk, and Night choice.
 export const THEME_LABELS: Record<Theme, string> = {
   day: 'Day',
   dusk: 'Dusk',
@@ -43,11 +43,13 @@ export class ThemeController {
     this.#apply(theme);
     this.#persist(theme);
   }
+}
 
-  cycle(): void {
-    const next = THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length];
-    this.set(next);
-  }
+// The menu's Night mode toggle: on goes straight to night-red, never through dusk's brighter palette
+// to dark-adapted eyes, and off returns to the theme it left (day only when day was last).
+export function nightToggleTarget(current: Theme, remembered: Theme): Theme {
+  if (current !== 'night-red') return 'night-red';
+  return remembered === 'night-red' ? 'day' : remembered;
 }
 
 // Wires a ThemeController to the document and localStorage for app use.

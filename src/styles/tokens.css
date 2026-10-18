@@ -72,14 +72,20 @@
   --system-bar-fallback: calc(var(--control-size) + var(--space-1));
   --system-bar-clearance: env(safe-area-inset-bottom, 0px);
   /* The chrome gutter: the inline edge every bar and floating chart control keeps, the shared
-     --space-3 plus that side's safe area, so a landscape notch phone keeps the top bar, banners,
+     --space-3 plus that side's safe area, so a landscape notch phone keeps the status bar, banners,
      badges, map controls, and strips clear of the notch on one line. */
   --chrome-inset-start: calc(var(--space-3) + env(safe-area-inset-left, 0px));
   --chrome-inset-end: calc(var(--space-3) + env(safe-area-inset-right, 0px));
+  /* The chart reaches the top edge of the screen, so every control floating at its top clears a
+     status bar or cutout that overlays the page there. */
+  --chrome-inset-top: env(safe-area-inset-top, 0px);
   /* WCAG 2.5.5 sets 44px as the touch-target minimum, so list rows meet the same floor as the
      primary controls even though they read visually denser; kept equal to --control-size rather
      than its own value so the two cannot drift apart. */
   --row-size: var(--control-size);
+  /* The physical touch-target floor, for a control that must stay one target wide while text grows
+     (the status bar's slim ends). */
+  --target-floor: 44px;
   --tracking-caps: 0.06em;
   --disabled-opacity: 0.45;
   /* The pressed-feedback dim shared by the bordered button, the icon pill, and the strip ack pill,

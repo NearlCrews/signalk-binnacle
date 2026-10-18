@@ -196,7 +196,7 @@
    docks panels with these rules, so the docked edge sits clear of the notch. */
 .panel-slot {
   position: absolute;
-  inset-block: 0;
+  inset-block: var(--chrome-inset-top) 0;
   inset-inline-start: env(safe-area-inset-left, 0px);
   z-index: var(--z-panel);
 }

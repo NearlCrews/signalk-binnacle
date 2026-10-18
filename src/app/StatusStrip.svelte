@@ -1,7 +1,6 @@
 <script lang="ts">
 import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-import VolumeX from '@lucide/svelte/icons/volume-x';
-import { onDestroy } from 'svelte';
+import { onDestroy, onMount, type Snippet } from 'svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import {
@@ -12,7 +11,8 @@ import {
 } from '$entities/vessel';
 import { AutopilotChip } from '$features/autopilot';
 import { type MenuItem, PinnedActions } from '$features/menu';
-import { type AlarmAudioState, alarmAudioNote, primeAlarmAudio } from '$shared/audio';
+import type { CompanionState } from '$features/prewarm';
+import { type AlarmAudioState, primeAlarmAudio } from '$shared/audio';
 import {
   createMediaQuery,
   formatBearingOr,
@@ -22,6 +22,7 @@ import {
   formatLongitude,
   formatMetersOrNm,
   formatSpeedOr,
+  LANDSCAPE_SHORT_QUERY,
   lengthUnit,
   NARROW_QUERY,
   type ReactiveClock,
@@ -30,8 +31,10 @@ import {
 } from '$shared/lib';
 import { COG_MIN_SOG_MPS } from '$shared/nav';
 import { type ConnectionPhase, isConnectionDown } from '$shared/signalk';
-import { TransientNote } from '$shared/ui';
-import { spanColumns } from './span-columns';
+import { observeClientHeight, TransientNote } from '$shared/ui';
+import { readoutBudget } from './readout-budget';
+import StatusCell from './StatusCell.svelte';
+import { buildStatusNotices } from './status-notices';
 
 let {
   connectionLabel,
@@ -67,9 +70,24 @@ let {
   onReconnect,
   onOpenHelp = undefined,
   onOpenAnchor = undefined,
+  collisionMuteMinutes = undefined,
+  onUnmuteCollision = undefined,
+  updateReady = false,
+  onReload = undefined,
+  chartLocker = undefined,
+  onRetryChartLocker = undefined,
+  onOpenOfflineCharts = undefined,
+  onOpenWeather = undefined,
+  onOpenRadar = undefined,
+  onOpenAis = undefined,
+  emergency = false,
+  start = undefined,
+  end = undefined,
+  onBarHeight = () => {},
 }: {
   connectionLabel: string;
-  // The fuller diagnosis behind the conn dot's short label, shown on hover and on a dot tap.
+  // The fuller diagnosis behind the short connection label, shown on the Status cell's hover and in
+  // its list.
   connectionTitle?: string;
   streamError: boolean;
   dataStalled?: boolean;
@@ -127,6 +145,27 @@ let {
   onOpenHelp?: () => void;
   // Opens the Anchor watch panel: overnight the cell is the monitoring surface, so it is a door.
   onOpenAnchor?: () => void;
+  // The collision alarm's mute, in whole minutes left; undefined while it sounds normally.
+  collisionMuteMinutes?: number;
+  onUnmuteCollision?: () => void;
+  // A new version of the app is waiting for a reload.
+  updateReady?: boolean;
+  onReload?: () => void;
+  // Chart Locker's access state, while it is installed.
+  chartLocker?: { state: CompanionState; accessUrl: string };
+  onRetryChartLocker?: () => void;
+  onOpenOfflineCharts?: () => void;
+  onOpenWeather?: () => void;
+  onOpenRadar?: () => void;
+  onOpenAis?: () => void;
+  // A safety alarm is taking the screen, so nothing the bar opened may cover its card.
+  emergency?: boolean;
+  // The bar's two ends: the menu at the start and MOB at the end. Each receives whether the bar is
+  // slim, where only icons fit.
+  start?: Snippet<[boolean]>;
+  end?: Snippet<[boolean]>;
+  // The bar's full height, for surfaces that open above it and must not cover it.
+  onBarHeight?: (height: number) => void;
 } = $props();
 
 const connectionDown = $derived(isConnectionDown(connectionPhase));
@@ -149,11 +188,8 @@ const connTitle = $derived(connectionTitle || connectionLabel);
 // which remove themselves once audio first runs: a context the browser suspends later (a
 // backgrounded tab, a phone call) would otherwise leave an Enable tap that does nothing. A blocked
 // gate clears on the tap and the notice leaves; a failed device may not come back, so that tap also
-// says why. Unsupported has no action at all, only the explanation.
-function retrySoundOff(): void {
-  primeAlarmAudio();
-  explainSoundOff();
-}
+// says why, on the row the list already shows. Unsupported has no action at all, only the
+// explanation.
 // A fallen-back rotation is already showing north up and resumes on its own when its data returns,
 // so a tap on its caution-styled cell explains, like every other caution cell, rather than
 // discarding the chosen mode; choosing north up for good is the caution line's explicit action.
@@ -161,10 +197,6 @@ function explainOrientation(): void {
   if (orientation) chipNote.show(`${orientation.label}. ${ORIENTATION_RESUMES}`, CHIP_NOTE_MS);
 }
 const ORIENTATION_RESUMES = 'The chosen rotation resumes when its data returns.';
-function explainSoundOff(): void {
-  const note = soundOff === undefined ? undefined : alarmAudioNote(soundOff);
-  if (note) chipNote.show(note, CHIP_NOTE_MS);
-}
 const aisTitle = $derived.by(() => {
   if (aisUnassessed === 0) return 'AIS targets being watched for collision risk';
   const cause = aisOwnFixLost
@@ -175,23 +207,89 @@ const aisTitle = $derived.by(() => {
     : '';
   return `AIS targets being watched for collision risk; ${cause}${nearest}`;
 });
-const radarTitle = $derived.by(() => {
-  if (radarHealth.state !== 'failed') {
-    return 'Radar is transmitting but no fresh echo frames are arriving';
+
+// The bar's layout, measured: whether the ends go slim (icons only), whether the bar is a sideways
+// phone's single row, and how many columns the readouts have, which decides what gives way.
+const landscapeShort = createMediaQuery(LANDSCAPE_SHORT_QUERY);
+// The ends go slim while the bar holds fewer than two end columns and four readout columns, counted
+// in the bar's own column module, so it follows the text size. A phone held sideways always goes
+// slim, since its height is the scarce axis.
+const SLIM_BAR_COLUMNS = 6;
+// A sideways phone keeps one row while three readout columns fit beside the tiles.
+const SIDEWAYS_ROW_REM = 34;
+// The most pinned tiles the bar lays on its own columns.
+const MAX_TILE_COLUMNS = 6;
+let footer = $state<HTMLElement>();
+let grid = $state<HTMLElement>();
+let readouts = $state<HTMLElement>();
+let barRem = $state(Number.POSITIVE_INFINITY);
+let cellRem = $state(0);
+let readoutColumns = $state(Number.POSITIVE_INFINITY);
+const slim = $derived(landscapeShort.matches || barRem < SLIM_BAR_COLUMNS * cellRem);
+const sideways = $derived(landscapeShort.matches && barRem >= SIDEWAYS_ROW_REM);
+
+function measure(): void {
+  if (!footer || !grid || !readouts) return;
+  const root = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  // The content box, as the container queries see it.
+  const style = getComputedStyle(footer);
+  const content =
+    footer.clientWidth -
+    Number.parseFloat(style.paddingInlineStart) -
+    Number.parseFloat(style.paddingInlineEnd);
+  barRem = content / root;
+  cellRem = Number.parseFloat(style.getPropertyValue('--strip-cell-min')) || 0;
+  // The helm row places every readout in a reserved column, so nothing gives way there.
+  if (getComputedStyle(readouts).display === 'contents') {
+    readoutColumns = Number.POSITIVE_INFINITY;
+    return;
   }
-  return radarHealth.reason === 'renderer'
-    ? 'Radar is transmitting but the echo display failed on this device; open Radar controls'
-    : 'Radar is transmitting but its data stream failed; open Radar controls';
+  // A subgrid reports no tracks of its own: count the bar's columns between the two ends.
+  const own = getComputedStyle(readouts).gridTemplateColumns;
+  const tracks = (own.startsWith('subgrid') ? getComputedStyle(grid).gridTemplateColumns : own)
+    .split(' ')
+    .filter((track) => Number.parseFloat(track) > 0).length;
+  readoutColumns = own.startsWith('subgrid') ? Math.max(0, tracks - 2) : tracks;
+}
+
+onMount(() => {
+  let frame: number | undefined;
+  const schedule = (): void => {
+    if (frame === undefined)
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        measure();
+      });
+  };
+  const observer = new ResizeObserver(schedule);
+  if (footer) observer.observe(footer);
+  observer.observe(document.documentElement);
+  measure();
+  return () => {
+    observer.disconnect();
+    if (frame !== undefined) cancelAnimationFrame(frame);
+  };
 });
 
-// The phone-width strip carries a bounded, context-prioritized readout set instead of hiding COG,
-// heading, and AIS with fixed CSS: underway or navigating, COG is the course reference, and a boat
-// with only a compass shows HDG. A phone carries no AIS cell, so degraded assessment there goes on
-// the caution line rather than inserting a cell that would shift every readout at the moment a
-// hazard is reported; it must never disappear just because the screen is narrow. Wide layouts show
-// everything.
+// The optional readouts own fixed spare columns on the helm row, so one appearing never moves
+// another: chart orientation (a standing setting) the first, the anchor watch the second, and the
+// autopilot the second unless the anchor holds it, when it takes the Time column and Time steps
+// aside. Stacked layouts place them in reading order.
+const showAutopilot = $derived(
+  autopilotChip !== undefined && autopilotChip.kind !== 'hidden' && onOpenAutopilot !== undefined,
+);
+const autopilotSlot = $derived(anchor.watching ? 'slot-extra-3' : 'slot-extra-2');
+const extras = $derived(
+  (orientation ? 1 : 0) + (anchor.watching ? 1 : 0) + (showAutopilot ? 1 : 0),
+);
+const budget = $derived(readoutBudget(readoutColumns, extras));
+
+// A narrow bar carries a bounded, context-prioritized readout set instead of hiding COG, heading,
+// and AIS with fixed CSS: underway or navigating, COG is the course reference, and a boat with only
+// a compass shows HDG. Unassessed AIS targets are always the Status cell's to report, so a compact
+// bar dropping the AIS cell never hides them. Wide layouts show everything.
 const compactQuery = createMediaQuery(NARROW_QUERY);
-const compact = $derived(compactQuery.matches);
+const compact = $derived(compactQuery.matches || budget.compact);
 const underway = $derived(!vessel.sogStale && (vessel.sogMps ?? 0) >= COG_MIN_SOG_MPS);
 const showCog = $derived(!compact || navigating || underway);
 const showHdg = $derived(
@@ -199,11 +297,14 @@ const showHdg = $derived(
 );
 const lookoutOpen = $derived(connectionPhase === 'open');
 const showLookout = $derived(lookoutOpen && !compact);
-const aisNotice = $derived(
-  lookoutOpen && compact && aisUnassessed > 0
-    ? `${aisUnassessed} AIS ${aisUnassessed === 1 ? 'target' : 'targets'} unassessed`
-    : undefined,
+
+// The pinned tiles take whole bar columns, centered between the ends, while the bar has a column
+// for each; otherwise they share the readouts' width as equal tiles.
+const tileSpan = $derived(Math.min(pinnedActions.length, MAX_TILE_COLUMNS));
+const tilesOnColumns = $derived(
+  !sideways && Number.isFinite(readoutColumns) && tileSpan > 0 && readoutColumns >= tileSpan,
 );
+const tileStart = $derived(2 + Math.floor((readoutColumns - tileSpan) / 2));
 
 const depth = $derived(vessel.safetyDepth);
 
@@ -245,94 +346,51 @@ const depthWatchPaused = $derived(
   shallowState === 'stale' || shallowState === 'no-reading' || depth.stale,
 );
 
-// The optional readouts own fixed spare columns on the helm row, so one appearing never moves
-// another: chart orientation (a standing setting) the first, the anchor watch the second, and the
-// autopilot the second unless the anchor holds it, when it takes the Time column and Time steps
-// aside. Stacked layouts place them in reading order.
-const showAutopilot = $derived(
-  autopilotChip !== undefined && autopilotChip.kind !== 'hidden' && onOpenAutopilot !== undefined,
-);
-const autopilotSlot = $derived(anchor.watching ? 'slot-extra-3' : 'slot-extra-2');
 // One string, so the label and its reference cannot be split by a reflow into two spaces.
 const orientationLabel = $derived(
   orientation?.reference ? `Chart · ${orientation.reference}` : 'Chart',
 );
 
-const alertText = $derived(`${alertCount} ${alertCount === 1 ? 'alert' : 'alerts'}`);
-const weatherTitle = $derived(`Weather warning: ${weatherWarning}. Open Weather for details.`);
-const radarText = $derived(
-  radarHealth.state === 'stale'
-    ? 'Radar stale'
-    : radarHealth.state === 'failed' && radarHealth.reason === 'renderer'
-      ? 'Radar display failed'
-      : 'Radar stream failed',
+const notices = $derived(
+  buildStatusNotices({
+    streamError,
+    connectionDown,
+    dataStalled,
+    connectionLabel,
+    connectionTitle: connTitle,
+    online,
+    fixStale,
+    gpsNeverReceived,
+    linkDown,
+    depthPaused: depthWatchPaused,
+    depthTitle: depthTitle(depth, shallowAlarming),
+    collisionMuteMinutes,
+    soundOff,
+    alertCount,
+    weatherWarning,
+    radarHealth,
+    lookoutOpen,
+    aisUnassessed,
+    aisTitle,
+    orientation,
+    chartLocker,
+    updateReady,
+    onReconnect,
+    onOpenHelp,
+    onUnmuteCollision,
+    onEnableSound: primeAlarmAudio,
+    onRetrySound: primeAlarmAudio,
+    onOpenAlarms,
+    onOpenWeather,
+    onOpenRadar,
+    onOpenAis,
+    onResetOrientation,
+    onRetryChartLocker,
+    onOpenOfflineCharts,
+    onReload,
+  }),
 );
 </script>
-
-<!-- A caution-line item spanning whole columns of the readout grid: an icon, the words, and the one
-     action that fixes it, when there is one. -->
-{#snippet notice(
-  text: string,
-  options: {
-    cls?: string;
-    title?: string;
-    live?: boolean;
-    mute?: boolean;
-    action?: string;
-    onAction?: () => void;
-  } = {},
-)}
-  <span
-    class="notice {options.cls ?? ''}"
-    title={options.title}
-    role={options.live ? 'status' : undefined}
-    aria-live={options.live ? 'polite' : undefined}
-    use:spanColumns
-  >
-    <span class="notice-body">
-      {#if options.mute}
-        <VolumeX size={16} aria-hidden="true" />
-      {:else}
-        <TriangleAlert size={16} aria-hidden="true" />
-      {/if}
-      {text}
-      {#if options.action && options.onAction}
-        <button type="button" class="btn btn-compact" onclick={options.onAction}>
-          {options.action}
-        </button>
-      {/if}
-    </span>
-  </span>
-{/snippet}
-
-<!-- A caution-line item that is itself the tap: an explanation, or a door to its panel. -->
-{#snippet tapNotice(
-  text: string,
-  onTap: () => void,
-  options: { cls?: string; title?: string; label?: string; live?: boolean; mute?: boolean } = {},
-)}
-  <button
-    type="button"
-    class="notice {options.cls ?? ''}"
-    title={options.title}
-    aria-label={options.label}
-    onclick={onTap}
-    use:spanColumns
-  >
-    <span class="notice-body">
-      {#if options.mute}
-        <VolumeX size={16} aria-hidden="true" />
-      {:else}
-        <TriangleAlert size={16} aria-hidden="true" />
-      {/if}
-      {#if options.live}
-        <span role="status" aria-live="polite">{text}</span>
-      {:else}
-        {text}
-      {/if}
-    </span>
-  </button>
-{/snippet}
 
 <!-- A motion readout: a value and its unit, in the caution voice while its source is lost, and
      subordinated with a dashed underline while the link itself is down. -->
@@ -356,125 +414,27 @@ const radarText = $derived(
   </span>
 {/snippet}
 
-<footer class="status-strip" class:editing>
-  <div class="strip-grid">
-    <!-- The caution line: every problem that is not one readout's own, each item snapping to whole
-         columns of the readout grid below so the two rows share the same edges. It takes no space
-         while nothing is wrong. -->
-    <div class="strip-notices">
-      {#if streamError}
-        <!-- Not a live region: the always-mounted conn dot announces every connection phase
-             politely, and the one assertive channel is App's annunciator, which a data-link note
-             must not talk over. -->
-        {@render notice('Data link failed', {
-          cls: 'connection-action',
-          action: 'Retry',
-          onAction: onReconnect,
-        })}
-      {:else if connectionDown || dataStalled}
-        <!-- A down socket, or one that is open but silent (a stop the per-cell staleness dashes
-             never name; connectionLabel already says which). Not a live region: the conn dot
-             announces every phase, and a second region carrying the same label announced the drop
-             twice. This is the sighted half. -->
-        {@render notice(connectionLabel, {
-          cls: 'connection-action',
-          title: 'Readouts pause until data returns',
-          action: 'Reconnect',
-          onAction: onReconnect,
-        })}
-      {/if}
-      {#if !online}
-        {@render notice('Offline', { cls: 'offline', live: true })}
-      {/if}
-      {#if fixStale}
-        {@render notice('No GPS fix', {
-          cls: linkDown ? 'fix-notice subordinate' : 'fix-notice',
-          live: true,
-        })}
-      {:else if gpsNeverReceived}
-        <!-- Connected, but no position has ever arrived: without this the strip looks healthy while
-             every position-dependent feature silently waits. -->
-        {@render notice('Waiting for GPS', {
-          cls: 'fix-notice',
-          live: true,
-          title:
-            "Connected, but the server has not published a GPS position. Check the GPS source in the Signal K server's Data Browser, or open Help.",
-          action: onOpenHelp ? 'Help' : undefined,
-          onAction: onOpenHelp,
-        })}
-      {/if}
-      {#if aisNotice}
-        {@render tapNotice(aisNotice, () => chipNote.show(aisTitle, CHIP_NOTE_MS), {
-          cls: 'lookout-notice',
-          title: aisTitle,
-        })}
-      {/if}
-      {#if orientation && !orientation.active}
-        <!-- The Chart cell says north up in the caution voice; the full label names why the chosen
-             rotation fell back. -->
-        {@render notice(orientation.label, {
-          cls: 'orientation-notice',
-          action: 'Use north up',
-          onAction: onResetOrientation,
-        })}
-      {/if}
-      {#if weatherWarning}
-        {@render tapNotice(weatherWarning, () => chipNote.show(weatherTitle, CHIP_NOTE_MS), {
-          title: weatherTitle,
-        })}
-      {/if}
-      {#if soundOff === 'blocked'}
-        {@render notice('Alarm sound off', {
-          cls: 'sound-off-notice',
-          title: alarmAudioNote(soundOff),
-          mute: true,
-          action: 'Enable',
-          onAction: primeAlarmAudio,
-        })}
-      {:else if soundOff === 'failed'}
-        {@render notice('Alarm sound failed', {
-          cls: 'sound-off-notice',
-          title: alarmAudioNote(soundOff),
-          mute: true,
-          action: 'Try again',
-          onAction: retrySoundOff,
-        })}
-      {:else if soundOff === 'unsupported'}
-        {@render tapNotice('Alarm sound unavailable', explainSoundOff, {
-          cls: 'sound-off-notice',
-          title: alarmAudioNote(soundOff),
-          mute: true,
-        })}
-      {/if}
-      {#if alertCount > 0 && onOpenAlarms}
-        {@render tapNotice(alertText, onOpenAlarms, {
-          cls: 'alerts-notice',
-          label: `${alertText}, open Alarms`,
-        })}
-      {/if}
-      {#if radarHealth.state !== 'quiet'}
-        <!-- Radar trouble stays visible with Radar Controls closed: the picture the helm relies on
-             has quietly stopped, which the panel alone cannot say. role=status announces once. -->
-        {@render tapNotice(radarText, () => chipNote.show(radarTitle, CHIP_NOTE_MS), {
-          cls: radarHealth.state === 'failed' ? 'radar-notice offline' : 'radar-notice',
-          title: radarTitle,
-          live: true,
-        })}
-      {/if}
-    </div>
-    <button
-      type="button"
-      class="conn"
-      class:conn--down={connectionDown || dataStalled}
-      title={connTitle}
-      onclick={() => chipNote.show(connTitle, CHIP_NOTE_MS)}
-    >
-      <span class="conn-live" role="status" aria-live="polite">
-        <span class="status-dot" aria-hidden="true"></span>
-        <span class="visually-hidden">{connectionLabel}</span>
-      </span>
-    </button>
-    <div class="strip-readouts">
+<footer
+  class="status-strip"
+  class:editing
+  bind:this={footer}
+  use:observeClientHeight={() => onBarHeight(footer?.offsetHeight ?? 0)}
+>
+  <!-- Source order is the focus order: the menu, then MOB, then the readouts, so the emergency key
+       is the second stop however wide the bar is. The grid sets MOB at the trailing end. -->
+  <div
+    class="strip-grid"
+    class:slim
+    class:sideways
+    class:tiles-on-columns={tilesOnColumns}
+    style:--tile-start={tilesOnColumns ? tileStart : undefined}
+    style:--tile-span={tilesOnColumns ? tileSpan : undefined}
+    bind:this={grid}
+  >
+    <div class="bookend bookend--start" data-menu-opener-group>{@render start?.(slim)}</div>
+    <div class="bookend bookend--end">{@render end?.(slim)}</div>
+    <div class="strip-readouts" bind:this={readouts}>
+      <StatusCell {notices} {connectionLabel} connectionTitle={connTitle} {emergency} />
       {#if showLookout}
         <button
           type="button"
@@ -623,45 +583,49 @@ const radarText = $derived(
       {#if showAutopilot && autopilotChip && onOpenAutopilot}
         <AutopilotChip chip={autopilotChip} onOpen={onOpenAutopilot} cellClass={autopilotSlot} />
       {/if}
-      <!-- A stale fix never wears current-position styling: the label says what the coordinates
-           are (the last fix and its age), in the same caution treatment as the dashed readouts. -->
-      <span
-        class="data-cell data-cell--wide position-readout slot-position"
-        class:data-cell--warning={retainedFix}
-        title={retainedFix ? 'Last known position; the GPS fix is stale' : 'Vessel position'}
-      >
-        <span class="data-cell-label">{positionLabel}</span>
-        <span class="data-cell-value">
-          <span class="coordinate"><b class="num">{latitude[0]}</b>{latitude[1]}</span>
-          <span class="coordinate"><b class="num">{longitude[0]}</b>{longitude[1]}</span>
+      {#if budget.position}
+        <!-- A stale fix never wears current-position styling: the label says what the coordinates
+             are (the last fix and its age), in the same caution treatment as the dashed readouts. -->
+        <span
+          class="data-cell data-cell--wide position-readout slot-position"
+          class:data-cell--warning={retainedFix}
+          title={retainedFix ? 'Last known position; the GPS fix is stale' : 'Vessel position'}
+        >
+          <span class="data-cell-label">{positionLabel}</span>
+          <span class="data-cell-value">
+            <span class="coordinate"><b class="num">{latitude[0]}</b>{latitude[1]}</span>
+            <span class="coordinate"><b class="num">{longitude[0]}</b>{longitude[1]}</span>
+          </span>
         </span>
-      </span>
-      <span class="data-cell time-readout slot-time" title="Local time">
-        <span class="data-cell-label">Time</span>
-        <span class="data-cell-value"><b class="num">{formatClockTime(clock.now)}</b></span>
-      </span>
+      {/if}
+      {#if budget.time}
+        <span class="data-cell time-readout slot-time" title="Local time">
+          <span class="data-cell-label">Time</span>
+          <span class="data-cell-value"><b class="num">{formatClockTime(clock.now)}</b></span>
+        </span>
+      {/if}
     </div>
-    <PinnedActions actions={pinnedActions} />
+    <PinnedActions actions={pinnedActions} {emergency} />
   </div>
   <TransientNote message={chipNote.message} noteClass="chip-note" />
 </footer>
 
 <style>
-/* The status bar is one grid of equal columns, the bar's design rule: every readout is one column
-   (the vessel position two), every pinned action is one column, labels share one line and values
-   share one baseline across the bar (the .data-cell vocabulary in data-cells.css), and the caution
-   line snaps to the same column edges. Three layouts, one rule:
-   - Stacked, the default: the readouts fill a wrapping grid of equal columns, at least
-     --strip-cell-min wide, with the pinned tiles on their own row beneath.
-   - Helm row, once the strip holds fourteen columns: five instrument columns, four tile columns at
-     the true center, and five more columns (two spare for the optional readouts, then position and
-     time), all on one row. Focus follows that visual order (reading-flow), not the source order.
-   - Sideways phone: the readouts beside icon tiles on one row, while there is room for three
-     readout columns. */
+/* The status bar is the app's only chrome: one grid of equal columns, the bar's design rule. The menu
+   and MOB bookend it at full height, every readout is one column (the vessel position two), every
+   pinned tile is one column, labels share one line and values share one baseline across the bar
+   (the .data-cell vocabulary in data-cells.css), and a problem never adds a row: it shows in its own
+   readout or in the Status cell. Four layouts, one rule:
+   - Stacked, the default: the ends take the first and last column, the readouts flow through the
+     columns between them (a subgrid, so every cell edge is a bar column edge), and the tiles sit on
+     whole columns centered beneath.
+   - Slim, a narrow bar: the ends shrink to one icon target each and the readouts share the rest.
+   - Sideways phone: the readouts beside icon tiles on one row, between slim ends.
+   - Helm row, once the bar holds seventeen columns: everything on one row, in reserved columns.
+   Focus follows the source order (menu, MOB, readouts, tiles) everywhere. */
 .status-strip {
-  /* The query container for the helm row below. */
+  /* The query container for the helm row and the large-text layout below. */
   container: status-strip / inline-size;
-  --strip-gutter: 1rem;
   /* The stacked grid's column floor: two hold the vessel position. */
   --strip-cell-min: var(--data-cell-min);
   padding: var(--space-2) 0.5rem;
@@ -682,105 +646,70 @@ const radarText = $derived(
 }
 .strip-grid {
   display: grid;
-  /* The connection dot's gutter, the readouts, and a matching gutter, so the readouts and the
-     caution line share one left edge and the helm row's tiles sit at the true center. */
-  grid-template-columns: var(--strip-gutter) minmax(0, 1fr) var(--strip-gutter);
-}
-.strip-notices,
-.strip-readouts {
-  grid-column: 2;
-  display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--strip-cell-min), 1fr));
+  grid-template-rows: auto auto;
+  row-gap: var(--space-1);
 }
-.strip-notices {
-  grid-row: 1;
-  /* Each notice sizes its content against the line's own width. */
-  container-type: inline-size;
-}
-.strip-notices:not(:has(.notice)) {
-  display: none;
-}
-.strip-readouts {
-  grid-row: 2;
-}
-.strip-grid > :global(.pinned-actions) {
-  grid-column: 1 / -1;
-  grid-row: 3;
-  margin-block-start: var(--space-1);
-}
-/* A notice is a grid item spanning whole columns (spanColumns); its body is its max-content. */
-.notice {
-  display: flex;
-  align-items: center;
+.bookend {
+  display: grid;
+  grid-row: 1 / -1;
   min-inline-size: 0;
-  min-block-size: var(--control-size);
-  padding: 0 0.35rem;
-  border: 0;
-  background: none;
-  color: var(--warning);
-  font: inherit;
-  font-weight: 600;
-  text-align: start;
 }
-button.notice {
-  cursor: pointer;
-}
-.notice-body {
-  display: inline-flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  inline-size: max-content;
-  max-inline-size: 100cqi;
-}
-.notice-body :global(svg) {
-  flex: none;
-}
-.notice-body .btn {
-  font-weight: 400;
-}
-.offline {
-  color: var(--alarm);
-}
-/* The connection dot: the healthy state spends no strip space on the word "Connected" (the label
-   stays for assistive tech and the hover title); a drop turns the dot the caution color, and the
-   caution line carries the visible label and its action. */
-/* The gutter is narrow, so the tap area reaches into the strip's edge padding and the first cell's
-   empty padding to clear the 24px target floor without moving a readout. */
-.conn::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline: -0.5rem -0.25rem;
-}
-.conn {
+.bookend--start {
   position: relative;
   grid-column: 1;
+  padding-inline-end: var(--space-1);
+}
+.bookend--end {
+  grid-column: -2 / -1;
+  padding-inline-start: var(--space-1);
+}
+.strip-readouts {
+  grid-column: 2 / -2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: subgrid;
+}
+.strip-grid > :global(.pinned-actions) {
+  grid-column: 2 / -2;
   grid-row: 2;
+}
+/* The tiles on whole bar columns, one each, centered between the ends; fewer tiles than columns
+   start at the first, so every tile edge stays on the grid. */
+.strip-grid.tiles-on-columns > :global(.pinned-actions) {
+  grid-column: var(--tile-start) / span var(--tile-span);
+  --bar-capacity: var(--tile-span);
+  --bar-tile-column: calc(100% / var(--tile-span));
+  --bar-tile-gap: 0;
+  --bar-tile-inset: var(--space-1);
+  --bar-tile-justify: start;
+}
+.strip-grid.slim {
+  grid-template-columns:
+    calc(var(--target-floor) + var(--space-1))
+    repeat(auto-fill, minmax(var(--strip-cell-min), 1fr))
+    calc(var(--target-floor) + var(--space-1));
+}
+/* A phone held sideways has the width for one row but not the height for two: the readouts take the
+   middle on their own equal-column grid (wrapping whole cells onto a second line of the same columns
+   rather than running under the tiles), with the icon tiles beside them, all between slim ends. */
+.strip-grid.sideways {
+  grid-template-columns:
+    calc(var(--target-floor) + var(--space-1))
+    minmax(0, 1fr)
+    auto
+    calc(var(--target-floor) + var(--space-1));
+  grid-template-rows: auto;
+}
+.strip-grid.sideways .strip-readouts {
+  grid-column: 2;
+  grid-template-columns: repeat(auto-fill, minmax(var(--strip-cell-min), 1fr));
+}
+.strip-grid.sideways > :global(.pinned-actions) {
+  grid-column: 3;
+  grid-row: 1;
   align-self: start;
-  display: inline-flex;
-  align-items: center;
-  block-size: var(--control-size);
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-.conn-live {
-  display: inline-flex;
-  align-items: center;
-}
-.status-dot {
-  inline-size: 0.6rem;
-  block-size: 0.6rem;
-  border-radius: 50%;
-  background: var(--dot-color, var(--ok));
-}
-.conn--down .status-dot {
-  --dot-color: var(--warning);
+  padding-inline-start: var(--space-1);
 }
 /* The cell-tap note floats above the strip, lifted over any safety rail by the shared clearance
    variable and layered below the safety strips so it can never cover a safety card. */
@@ -810,10 +739,10 @@ button.notice {
 .subordinate :global(.word) {
   color: var(--text-subordinate);
 }
-/* On a phone or small tablet the position and time readouts leave the strip: any watch or phone
-   shows the time, and the Position instrument tile covers the position on demand. With no
-   two-column position to hold, the columns may narrow to one single-value readout, so a 360 px
-   phone keeps SOG, COG, and Depth on one row. */
+/* On a phone or small tablet the position and time readouts leave the strip at once, before the
+   measured budget runs: any watch or phone shows the time, and the Position instrument tile covers
+   the position on demand. With no two-column position to hold, the columns may narrow to one
+   single-value readout. */
 @media (max-width: 900px) {
   .status-strip {
     --strip-cell-min: 5.75rem;
@@ -823,20 +752,19 @@ button.notice {
     display: none;
   }
 }
-@media (max-width: 600px) {
-  .status-strip {
-    --strip-gutter: 0.75rem;
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) {
+  .slot-position,
+  .slot-time {
+    display: none;
   }
 }
-/* Very large text on a narrow phone, where not even two readout columns fit: a column of one
-   readout per row would stack the strip taller than the chart can spare and push a safety strip off
-   the screen. The cells set their label beside the value instead, at the physical 44 px target
-   floor, and wrap as whole items. Two of the narrow columns plus the gutters, in rem, so it only
-   ever applies at enlarged text. */
-@container status-strip (max-width: 13rem) {
-  .strip-grid {
-    margin-block: calc(-1 * var(--space-1));
-  }
+/* Very large text on a narrow phone, where not even two readout columns fit between the ends: a
+   column of one readout per row would stack the strip taller than the chart can spare and push a
+   safety strip off the screen. The cells set their label beside the value instead, at the physical
+   44 px target floor, and wrap as whole items. Two narrow columns and the two slim ends (a 44 px
+   target and its 4 px gap each; a query cannot read a custom property), so it only ever applies
+   at enlarged text. */
+@container status-strip (max-width: calc(11.5rem + 96px)) {
   .strip-readouts {
     display: flex;
     flex-wrap: wrap;
@@ -863,65 +791,54 @@ button.notice {
     display: none;
   }
 }
-/* A phone held sideways has the width for one row but not the height for two: the readouts take the
-   leading space and the icon tiles the trailing edge, so the chart keeps the height a stacked strip
-   would spend. Only while three readout columns fit beside the tiles, in the strip's own rem, so at
-   very large text the tiles drop back onto their own row and the readouts keep the full width. */
-@media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) {
-  .slot-position,
-  .slot-time {
-    display: none;
-  }
-  @container status-strip (min-width: 34rem) {
-    .strip-grid {
-      grid-template-columns: var(--strip-gutter) minmax(0, 1fr) auto;
-    }
-    .strip-grid > :global(.pinned-actions) {
-      grid-column: 3;
-      grid-row: 2;
-      align-self: start;
-      margin-block-start: 0;
-    }
-  }
-}
-/* The helm row: fourteen equal columns between the gutters, about 1,580 px at the default text
-   size. Five instrument columns, four tile columns at the true center, then two spare columns for
-   the optional readouts, two for the position, and one for the time. Fourteen --data-cell-min
-   columns plus the two gutters; change the three together. */
-@container status-strip (min-width: 98.6rem) {
+/* The helm row: seventeen equal columns, about 1,880 px of bar at the default text size. The menu,
+   the Status cell, five instrument columns, four tile columns, two spare columns for the optional
+   readouts, two for the position, one for the time, and MOB. Seventeen --data-cell-min columns (the
+   container is the bar's content box); change the two together. */
+@container status-strip (min-width: 117.3rem) {
   .strip-grid {
-    grid-template-columns: var(--strip-gutter) repeat(14, minmax(0, 1fr)) var(--strip-gutter);
+    grid-template-columns: repeat(17, minmax(0, 1fr));
+    grid-template-rows: auto;
     reading-flow: grid-rows;
   }
-  .strip-notices {
-    grid-column: 2 / -2;
-    grid-template-columns: repeat(14, minmax(0, 1fr));
+  /* The visual order runs the readouts left to right; the two ends keep their early focus stops. */
+  .bookend {
+    grid-row: 1;
+  }
+  .bookend--start {
+    reading-order: -2;
+  }
+  .bookend--end {
+    reading-order: -1;
   }
   .strip-readouts {
     display: contents;
   }
   .strip-readouts > :global(*) {
-    grid-row: 2;
+    grid-row: 1;
   }
-  .slot-ais {
+  .strip-readouts > :global(.slot-status) {
     grid-column: 2;
   }
-  .slot-sog {
+  .slot-ais {
     grid-column: 3;
   }
-  .slot-cog {
+  .slot-sog {
     grid-column: 4;
   }
-  .slot-hdg {
+  .slot-cog {
     grid-column: 5;
   }
-  .slot-depth {
+  .slot-hdg {
     grid-column: 6;
   }
-  .strip-grid > :global(.pinned-actions) {
-    grid-column: 7 / span 4;
-    grid-row: 2;
-    margin-block-start: 0;
+  .slot-depth {
+    grid-column: 7;
+  }
+  .strip-grid > :global(.pinned-actions),
+  .strip-grid.tiles-on-columns > :global(.pinned-actions) {
+    grid-column: 8 / span 4;
+    grid-row: 1;
     --bar-capacity: 4;
     --bar-tile-column: 25%;
     --bar-tile-gap: 0;
@@ -935,13 +852,13 @@ button.notice {
     --bar-tile-strut: inline;
   }
   .slot-extra-1 {
-    grid-column: 11;
-  }
-  .strip-readouts > :global(.slot-extra-2) {
     grid-column: 12;
   }
+  .strip-readouts > :global(.slot-extra-2) {
+    grid-column: 13;
+  }
   .slot-position {
-    grid-column: 13 / span 2;
+    grid-column: 14 / span 2;
   }
   /* A divider only between two filled neighboring columns: never beside the tiles or an empty
      spare column. */
@@ -952,7 +869,7 @@ button.notice {
   }
   .slot-time,
   .strip-readouts > :global(.slot-extra-3) {
-    grid-column: 15;
+    grid-column: 16;
   }
   .strip-readouts:has(:global(.slot-extra-3)) .slot-time {
     display: none;

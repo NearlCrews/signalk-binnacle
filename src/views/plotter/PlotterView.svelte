@@ -895,6 +895,7 @@ $effect(() => {
   class:chart-host--end-panel={selectedNote !== undefined && noteLoader !== undefined}
   style:--rail-clearance={railClearance}
   style:--editing-panel-clearance={editingPanelClearance}
+  style:--auth-banner-height="{authBannerHeight}px"
   aria-label="Chart"
 >
   <ChartCanvas
@@ -975,11 +976,7 @@ $effect(() => {
       onDismissInsecure={onDismissInsecureNote}
     />
   </div>
-  <div
-    class="top-banner-stack"
-    style:--auth-banner-height="{authBannerHeight}px"
-    bind:clientHeight={bannerHeight}
-  >
+  <div class="top-banner-stack" bind:clientHeight={bannerHeight}>
     {#if criticalOverlayError}
       <div class="alert-note alert-note--filled toast-banner" role="alert">
         {criticalOverlayError}
@@ -2417,16 +2414,27 @@ $effect(() => {
 .chart-host {
   position: relative;
   block-size: 100%;
+  /* Nothing floating on the chart may spill over the status bar below it, where MOB lives: a
+     banner or toast that outgrows the chart at very large text is cut at its edge. Fixed-position
+     menus and dialogs are not this box's descendants for clipping, so they still reach the screen. */
+  overflow: clip;
 }
 .radar-placement-instruction {
   flex: 1;
   min-inline-size: 12rem;
 }
+/* The access banner stays inside the chart: at very large text on a small phone it can outgrow the
+   chart, and it scrolls there rather than spill over the status bar and MOB below. It sits at the
+   panel level, above MapLibre's own controls (z-index 2), so no control covers its text; a docked
+   panel, later in the page, still covers it. */
 .banner-slot {
   position: absolute;
-  inset-block-start: 0;
+  inset-block-start: var(--chrome-inset-top);
   inset-inline: 0;
-  z-index: var(--z-overlay);
+  z-index: var(--z-panel);
+  max-block-size: calc(100% - var(--chrome-inset-top));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 /* Positions the arrival banner and the toast in the same top-center slot, stacked when both are
    showing at once. The wrapper spans the full width so it can center either child, but stays
@@ -2435,7 +2443,11 @@ $effect(() => {
 .top-banner-stack {
   container: banner / inline-size;
   position: absolute;
-  inset-block-start: calc(var(--space-3) + var(--auth-banner-height, 0px));
+  inset-block-start: calc(
+    var(--chrome-inset-top) +
+    var(--space-3) +
+    var(--auth-banner-height, 0px)
+  );
   inset-inline: 0;
   display: flex;
   flex-direction: column;
@@ -2535,7 +2547,7 @@ $effect(() => {
     calc(100% - var(--chrome-inset-start) - var(--chrome-inset-end))
   );
   margin-inline: auto;
-  max-block-size: calc(100% - 2 * var(--space-3));
+  max-block-size: calc(100% - 2 * var(--space-3) - var(--chrome-inset-top));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;

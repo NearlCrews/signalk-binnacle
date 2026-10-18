@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'svelte';
+import { type ComponentProps, createRawSnippet } from 'svelte';
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import { AnchorWatch } from '$entities/anchor';
@@ -44,6 +44,19 @@ function body(props: ComponentProps<typeof StatusStrip>): string {
   return render(StatusStrip, { props }).body;
 }
 
+// The Status cell's text: its label, its word, and the words it names for assistive tech.
+function statusCell(html: string): { text: string; tag: string } {
+  const tag = openingTag(html, 'status-cell');
+  const start = html.indexOf(tag);
+  const inner = html.slice(start, html.indexOf('</button>', start));
+  const text = inner
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { text, tag };
+}
+
 // The opening tag of the first element carrying a class, throwing when absent.
 function openingTag(html: string, className: string): string {
   const at = html.indexOf(className);
@@ -53,23 +66,20 @@ function openingTag(html: string, className: string): string {
 }
 
 describe('StatusStrip depth alarm', () => {
-  it('carries no sound-off notice unless App reports an armed watch that cannot sound', () => {
-    expect(body(baseProps())).not.toContain('sound-off-notice');
-    const blocked = body({ ...baseProps(), soundOff: 'blocked' });
-    expect(blocked).toContain('Alarm sound off');
-    expect(blocked).toContain('>Enable</button>');
+  it('reports alarm sound in the Status cell only when App reports a watch that cannot sound', () => {
+    expect(statusCell(body(baseProps())).text).toBe('Status All clear');
+    const blocked = statusCell(body({ ...baseProps(), soundOff: 'blocked' }));
+    expect(blocked.text).toBe('Status Sound off');
+    expect(blocked.tag).toContain('title="Alarm sound off"');
   });
 
-  it('offers a tap only where a tap can bring the alarm sound back', () => {
-    const failed = body({ ...baseProps(), soundOff: 'failed' });
-    expect(failed).toContain('Alarm sound failed');
-    expect(failed).toContain('>Try again</button>');
-    // No Web Audio at all: the notice explains on a tap and offers no action that cannot work.
-    const unsupported = body({ ...baseProps(), soundOff: 'unsupported' });
-    expect(unsupported).toContain('Alarm sound unavailable');
-    expect(unsupported).not.toContain('>Enable</button>');
-    expect(unsupported).not.toContain('>Try again</button>');
-    expect(openingTag(unsupported, 'sound-off-notice')).toMatch(/^<button/);
+  it('tells a failed alarm sound from one the browser cannot play', () => {
+    expect(statusCell(body({ ...baseProps(), soundOff: 'failed' })).tag).toContain(
+      'title="Alarm sound failed"',
+    );
+    expect(statusCell(body({ ...baseProps(), soundOff: 'unsupported' })).tag).toContain(
+      'title="Alarm sound unavailable"',
+    );
   });
 
   it('shows the toolbar clock as local time, not UTC', () => {
@@ -135,37 +145,36 @@ describe('StatusStrip depth alarm', () => {
     expect(html).toContain('No GPS fix');
   });
 
-  it('leaves the reconnecting readout out of the live regions the conn dot already covers', () => {
+  it('names a dropped link in red, with the phase in the one always-mounted connection region', () => {
     const html = body({
       ...baseProps(),
       connectionLabel: 'Reconnecting…',
       connectionPhase: 'reconnecting',
     });
-    const notice = html.slice(0, html.indexOf('Reconnect</button>'));
-    expect(notice).toContain('Reconnecting…');
-    // One live region for the phase: the always-mounted dot, whose visually-hidden label is the
-    // only copy of connectionLabel inside a role="status".
-    expect(notice).not.toContain('role="status"');
-    expect(html.match(/role="status"/g) ?? []).toHaveLength(1);
+    const cell = statusCell(html);
+    expect(cell.text).toBe('Status No link');
+    expect(cell.tag).toContain('status-cell--alarm');
+    expect(cell.tag).toContain('title="Reconnecting…"');
+    expect(html).toMatch(
+      /class="visually-hidden conn-live" role="status" aria-live="polite">Reconnecting…</,
+    );
+    // The connection region and the notice region, and nothing else, in a strip with no readout
+    // regions of its own.
+    expect(html.match(/role="status"/g) ?? []).toHaveLength(2);
   });
 
-  it('shows the stalled-data readout with a reconnect action while the socket is open', () => {
-    const html = body({
-      ...baseProps(),
-      connectionLabel: 'Connected, no data',
-      dataStalled: true,
-    });
-    expect(html).toContain('Connected, no data');
-    expect(html).toContain('Reconnect</button>');
-    // The chip is the sighted half only; the conn dot's live region announces the label once.
-    expect(html.match(/role="status"/g) ?? []).toHaveLength(1);
-    expect(html).toContain('conn--down');
+  it('names a silent link while the socket is open', () => {
+    const cell = statusCell(
+      body({ ...baseProps(), connectionLabel: 'Connected, no data', dataStalled: true }),
+    );
+    expect(cell.text).toBe('Status No data');
+    expect(cell.tag).toContain('title="Connected, no data"');
   });
 
-  it('keeps the stalled readout out of a healthy connected strip', () => {
-    const html = body(baseProps());
-    expect(html).not.toContain('Reconnect</button>');
-    expect(html).not.toContain('conn--down');
+  it('keeps a healthy connected strip calm', () => {
+    const cell = statusCell(body(baseProps()));
+    expect(cell.text).toBe('Status All clear');
+    expect(cell.tag).not.toMatch(/status-cell--/);
   });
 
   it('replaces a stale depth with an explicit unavailable state', () => {
@@ -204,15 +213,14 @@ describe('StatusStrip depth alarm', () => {
     expect(body(baseProps())).not.toContain('>Paused<');
   });
 
-  it('says Waiting for GPS when connected with no position ever received', () => {
-    const waiting = body({ ...baseProps(), gpsNeverReceived: true });
-    expect(waiting).toContain('Waiting for GPS');
-    expect(waiting).toContain('Data Browser');
+  it('says No GPS when connected with no position ever received', () => {
+    const waiting = statusCell(body({ ...baseProps(), gpsNeverReceived: true }));
+    expect(waiting.text).toBe('Status No GPS');
+    expect(waiting.tag).toContain('title="Waiting for GPS"');
     // The had-then-lost case wins the same slot with its own wording.
-    const lost = body({ ...baseProps(), gpsNeverReceived: true, fixStale: true });
-    expect(lost).toContain('No GPS fix');
-    expect(lost).not.toContain('Waiting for GPS');
-    expect(body(baseProps())).not.toContain('Waiting for GPS');
+    const lost = statusCell(body({ ...baseProps(), gpsNeverReceived: true, fixStale: true }));
+    expect(lost.text).toBe('Status GPS lost');
+    expect(lost.tag).toContain('title="No GPS fix"');
   });
 
   it('keeps radar trouble visible with the radar panel closed, and quiet otherwise', () => {
@@ -239,13 +247,10 @@ describe('StatusStrip depth alarm', () => {
       fixStale: true,
       radarHealth: { state: 'stale' } as const,
     });
-    // The dashed SOG and the No GPS fix chip dim; the radar chip rides its own transport and
-    // must never dim with the Signal K link.
+    // The dashed SOG dims under the one failure, which the Status cell leads with in red.
     const sog = down.slice(down.indexOf('sog-readout'));
     expect(sog.slice(0, sog.indexOf('>'))).toContain('subordinate');
-    expect(openingTag(down, 'fix-notice')).toContain('subordinate');
-    const radar = down.indexOf('Radar stale');
-    expect(down.slice(down.lastIndexOf('<button', radar), radar)).not.toContain('subordinate');
+    expect(statusCell(down).text).toBe('Status +2 No link , also GPS lost, Radar');
     // A healthy link never subordinates anything.
     expect(body({ ...baseProps(), fixStale: true })).not.toContain('subordinate');
   });
@@ -259,39 +264,54 @@ describe('StatusStrip depth alarm', () => {
     expect(html).not.toContain('aria-label="Open anchor watch"');
   });
 
-  it('offers a Help action on the Waiting for GPS chip when the host wires one', () => {
-    const withHelp = body({ ...baseProps(), gpsNeverReceived: true, onOpenHelp: () => {} });
-    expect(withHelp).toContain('Waiting for GPS');
-    expect(withHelp).toContain('>Help</button>');
-    const without = body({ ...baseProps(), gpsNeverReceived: true });
-    expect(without).not.toContain('>Help</button>');
-  });
-
-  it('renders the explanatory chips as buttons carrying their titles, with no new live regions', () => {
+  it('renders the explanatory cells as buttons carrying their titles, with no new live regions', () => {
     const html = body({ ...baseProps(), aisCount: 3, connectionPhase: 'open' });
     expect(openingTag(html, 'slot-ais')).toMatch(/^<button[^>]*data-cell/);
     expect(openingTag(html, 'slot-ais')).toContain('AIS targets being watched for collision risk');
-    // The conn dot keeps its single live region inside the button.
-    expect(html.match(/role="status"/g) ?? []).toHaveLength(1);
+    // Only the Status cell's two regions, the connection and the notices.
+    expect(html.match(/role="status"/g) ?? []).toHaveLength(2);
   });
 });
 
-describe('StatusStrip alerts chip', () => {
-  it('stays hidden with no caution-grade alerts', () => {
-    expect(body(baseProps())).not.toContain('alerts-notice');
-  });
-
-  it('counts alerts in words and names its door, the visible words leading the name', () => {
-    expect(body({ ...baseProps(), alertCount: 1, onOpenAlarms: () => {} })).toContain('1 alert<');
-    const html = body({ ...baseProps(), alertCount: 3, onOpenAlarms: () => {} });
-    expect(html).toContain('3 alerts<');
-    expect(html).toContain('aria-label="3 alerts, open Alarms"');
+describe('StatusStrip alerts', () => {
+  it('counts alerts in words in the Status cell', () => {
+    expect(statusCell(body({ ...baseProps(), alertCount: 1, onOpenAlarms: () => {} })).text).toBe(
+      'Status 1 alert',
+    );
+    expect(statusCell(body({ ...baseProps(), alertCount: 3, onOpenAlarms: () => {} })).text).toBe(
+      'Status 3 alerts',
+    );
   });
 });
 
 describe('StatusStrip bar grid', () => {
-  it('shows nothing on the caution line while nothing is wrong', () => {
-    expect(body(baseProps())).not.toContain('class="notice');
+  it('has no caution line, whatever is wrong: problems live in the Status cell', () => {
+    const html = body({ ...baseProps(), online: false, fixStale: true, soundOff: 'blocked' });
+    expect(html).not.toContain('strip-notices');
+    expect(html).not.toContain('class="notice');
+    expect(statusCell(html).text).toBe('Status +2 Offline , also Sound off, GPS lost');
+  });
+
+  it('leads the readouts with the Status cell', () => {
+    const html = body(baseProps());
+    const readouts = html.slice(html.indexOf('strip-readouts'));
+    expect(readouts.indexOf('status-cell')).toBeLessThan(readouts.indexOf('data-cell sog-readout'));
+  });
+
+  it('renders the menu and MOB ends before the readouts, so MOB is the second focus stop', () => {
+    const html = body({
+      ...baseProps(),
+      start: createRawSnippet((slim: () => boolean) => ({
+        render: () => `<button>Menu ${slim()}</button>`,
+      })),
+      end: createRawSnippet(() => ({ render: () => '<button>MOB</button>' })),
+    });
+    const menu = html.indexOf('>Menu ');
+    const mob = html.indexOf('>MOB<');
+    expect(menu).toBeGreaterThan(-1);
+    expect(mob).toBeGreaterThan(menu);
+    expect(mob).toBeLessThan(html.indexOf('strip-readouts'));
+    expect(html).toContain('bookend bookend--start');
   });
 
   it('says Last fix without a dangling separator when the fix has no age', () => {
@@ -359,7 +379,7 @@ describe('StatusStrip bar grid', () => {
     expect(html).not.toContain('orientation-notice');
   });
 
-  it('says north up in the caution voice and names the fallback on the caution line', () => {
+  it('says north up in the caution voice and names the fallback in the Status cell', () => {
     const html = body({
       ...baseProps(),
       orientation: {
@@ -375,8 +395,10 @@ describe('StatusStrip bar grid', () => {
     // The full label is the live region, so the fallback is announced with its cause.
     expect(html).toMatch(/role="status" aria-live="polite">North up \(too slow for course up\)</);
     // A fallen-back cell explains rather than discarding the chosen rotation; north up for good is
-    // the caution line's explicit action.
+    // the Status list's explicit action.
     expect(html).not.toContain(', return to north up');
-    expect(html).toContain('Use north up');
+    const cell = statusCell(html);
+    expect(cell.text).toBe('Status North up');
+    expect(cell.tag).toContain('title="North up (too slow for course up)"');
   });
 });

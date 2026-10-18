@@ -16,6 +16,8 @@ interface StorageKeyDefinition {
 // consumes the classified inventory, and a source-inventory test rejects hardcoded Binnacle keys.
 const BINNACLE_STORAGE_KEYS = {
   theme: { key: 'binnacle:theme', scope: 'profile' },
+  // The lighter theme the Night mode toggle returns to: per device, like the dim level.
+  lastLightTheme: { key: 'binnacle:last-light-theme', scope: 'device' },
   mapView: { key: 'binnacle:map-view', scope: 'device' },
   trackSettings: { key: 'binnacle:track-settings', scope: 'profile' },
   lookoutThresholds: { key: 'binnacle:lookout-thresholds', scope: 'profile' },

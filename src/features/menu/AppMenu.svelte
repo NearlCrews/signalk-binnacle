@@ -21,9 +21,8 @@ import ToolbarEditor from './ToolbarEditor.svelte';
 interface Props {
   items?: MenuItem[];
   label?: string;
-  // Whether to render the topbar trigger. False once the Menu action is pinned to the bottom bar,
-  // so exactly one control named Menu exists at a time and the sheet still renders here.
-  showTrigger?: boolean;
+  // The status bar is slim and its ends show only their icons; the label stays for assistive tech.
+  labelHidden?: boolean;
   // The open state is controlled by the parent, so a panel's "back to menu" action can reopen the
   // menu after it closed on selection. The menu renders the current state and requests transitions.
   open: boolean;
@@ -40,7 +39,7 @@ interface Props {
 const {
   items = [],
   label = 'Menu',
-  showTrigger = true,
+  labelHidden = false,
   open,
   onOpenChange,
   pinnedIds = [],
@@ -88,9 +87,6 @@ onDestroy(() => {
 const groups = $derived.by(() => {
   const out: { label: string; items: MenuItem[] }[] = [];
   for (const item of items) {
-    // A bar-only action (the Menu opener) is not a launcher tile: it would sit inside the menu it
-    // opens. It still appears while customizing, because tapping a tile is the only pin control.
-    if (item.barOnly && !editing) continue;
     const label = item.group ?? '';
     const last = out.at(-1);
     if (last && last.label === label) last.items.push(item);
@@ -174,22 +170,23 @@ function onCardFocusOut(event: FocusEvent): void {
 }
 </script>
 
-{#if showTrigger}
-  <button
-    type="button"
-    class="icon-pill"
-    class:is-on={open}
-    bind:this={trigger}
-    aria-haspopup="true"
-    aria-expanded={open}
-    aria-controls={open ? 'app-menu-launcher' : undefined}
-    aria-label={label}
-    title={label}
-    onclick={() => onOpenChange(!open)}
-  >
-    <Menu size={20} aria-hidden="true" />
-  </button>
-{/if}
+<!-- The status bar's leading end, the full height of the bar. -->
+<button
+  type="button"
+  class="btn bar-bookend"
+  class:is-on={open}
+  bind:this={trigger}
+  data-menu-opener
+  aria-haspopup="true"
+  aria-expanded={open}
+  aria-controls={open ? 'app-menu-launcher' : undefined}
+  aria-label={label}
+  title={label}
+  onclick={() => onOpenChange(!open)}
+>
+  <Menu size={24} aria-hidden="true" />
+  <span class="bar-bookend-label" class:visually-hidden={labelHidden}>{label}</span>
+</button>
 <AnchoredMenu
   {open}
   onClose={() => closeMenu(true)}
@@ -254,22 +251,29 @@ function onCardFocusOut(event: FocusEvent): void {
 </AnchoredMenu>
 
 <style>
-/* Position the surface absolute under the hamburger, anchored to the inline-start of
-   .topbar-start (which carries position: relative). The surface grows from the top-left corner. */
+/* The surface opens above the status bar's leading end (which carries position: relative) and grows
+   from its bottom-left corner, so it never covers the bar or MOB. */
 :global(.launcher) {
   position: absolute;
-  inset-block-start: 100%;
+  inset-block-end: 100%;
   inset-inline-start: 0;
-  margin-block-start: var(--space-1);
+  margin-block-end: var(--space-1);
+  transform-origin: left bottom;
   z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   inline-size: min(22rem, calc(100dvw - 2 * var(--space-2)));
-  /* Fill the space below the topbar so the grouped grid fits without a scrollbar on a normal screen;
-     the topbar is one --control-size tall, and --space-6 leaves a small margin above and below. A
-     short helm display still caps here and scrolls. */
-  max-block-size: calc(100 * var(--dvh) - var(--control-size) - var(--space-6));
+  /* Fill the space above the bar so the grouped grid fits without a scrollbar on a normal screen,
+     clear of any top cutout, with a small margin above and below. A short helm display still caps
+     here and scrolls. */
+  max-block-size: calc(
+    100 *
+    var(--dvh) -
+    var(--bar-block-size, 0px) -
+    var(--chrome-inset-top) -
+    var(--space-6)
+  );
   padding: var(--space-3);
   /* The surface, border, radius, and shadow come from the shared .surface-elevated frame. */
 }
@@ -302,21 +306,23 @@ function onCardFocusOut(event: FocusEvent): void {
     100% 12px;
   background-attachment: local, local, scroll, scroll;
 }
-/* Matches the StatusStrip's own 900px stack breakpoint, so a landscape tablet never lands in the
-   gap where the menu is still a corner dropdown but the status strip below it has already stacked
-   to a single column. A phone held sideways keeps the strip on one row and the menu as a sheet. */
+/* Matches the StatusStrip's 900px breakpoint, where its position and time leave. The sheet rests on
+   the bar's top edge rather than the screen's, so the bar and MOB stay live beneath it; the bar
+   already carries the system-bar clearance. */
 @media (max-width: 900px) {
   :global(.launcher) {
     position: fixed;
-    inset-block-start: auto;
-    inset-block-end: 0;
+    inset-block-end: var(--bar-block-size, 0px);
     inset-inline-start: 0;
-    margin-block-start: 0;
+    margin-block-end: 0;
     transform-origin: bottom center;
     inline-size: 100dvw;
     max-inline-size: none;
-    max-block-size: calc(80 * var(--dvh));
-    padding-block-end: calc(var(--space-3) + var(--system-bar-clearance));
+    max-block-size: min(
+      calc(80 * var(--dvh)),
+      calc(100 * var(--dvh) - var(--bar-block-size, 0px) - var(--chrome-inset-top))
+    );
+    padding-block-end: var(--space-3);
     padding-inline-start: calc(var(--space-3) + env(safe-area-inset-left, 0px));
     padding-inline-end: calc(var(--space-3) + env(safe-area-inset-right, 0px));
     border-inline: 0;

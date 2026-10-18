@@ -21,9 +21,11 @@ import {
 
 interface Props {
   actions: MenuItem[];
+  // A safety alarm is taking the screen: the More menu closes rather than cover its card.
+  emergency?: boolean;
 }
 
-const { actions }: Props = $props();
+const { actions, emergency = false }: Props = $props();
 const compactPhone = createMediaQuery(NARROW_QUERY);
 // A phone held sideways keeps the strip on one row, so the tiles go icon-only there: the label
 // collapses to visually-hidden, keeping the accessible name and the 44px target.
@@ -127,6 +129,9 @@ function run(action: MenuItem, after?: () => void): void {
 }
 
 $effect(() => machine.syncOpen(moreOpen));
+$effect(() => {
+  if (emergency) moreOpen = false;
+});
 </script>
 
 <div class="pinned-actions strip-center" class:icon-only-bar={iconOnly} bind:this={bar}>

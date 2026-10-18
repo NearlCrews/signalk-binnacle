@@ -24,16 +24,22 @@ const base: ProfileSettings = {
 };
 
 describe('seedStarterProfiles', () => {
-  it('keeps Menu and a context-relevant safety action on each fresh helm', () => {
+  it('keeps a context-relevant safety action on each fresh helm, and never pins the menu', () => {
     const store = new ProfileStore(adapter);
     seedStarterProfiles(store, base);
     for (const profile of store.profiles) {
-      expect(profile.settings.pinnedActionIds?.[0]).toBe('menu');
+      // The menu is always the status bar's own end, never a pin.
+      expect(profile.settings.pinnedActionIds).not.toContain('menu');
       expect(profile.settings.pinnedActionIds?.some((id) => id === 'ais' || id === 'anchor')).toBe(
         true,
       );
     }
-    expect(store.profiles[0].settings.pinnedActionIds).toEqual(['menu', 'center', 'follow', 'ais']);
+    expect(store.profiles[0].settings.pinnedActionIds).toEqual([
+      'center',
+      'follow',
+      'layers',
+      'ais',
+    ]);
   });
 
   it('does not replace deliberate pins in an existing profile library', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { THEMES, ThemeController } from './theme.svelte';
+import { nightToggleTarget, ThemeController } from './theme.svelte';
 
 describe('ThemeController', () => {
   it('defaults to day', () => {
@@ -37,13 +37,17 @@ describe('ThemeController', () => {
     expect(applied).toContain('dusk');
     expect(saved).toContain('dusk');
   });
+});
 
-  it('cycle advances through the theme list and wraps', () => {
-    const c = new ThemeController('day', () => {});
-    c.cycle();
-    expect(c.theme).toBe(THEMES[1]);
-    c.set(THEMES[THEMES.length - 1]);
-    c.cycle();
-    expect(c.theme).toBe(THEMES[0]);
+describe('nightToggleTarget', () => {
+  it('goes straight to night from day or dusk, never through dusk', () => {
+    expect(nightToggleTarget('day', 'day')).toBe('night-red');
+    expect(nightToggleTarget('dusk', 'dusk')).toBe('night-red');
+  });
+
+  it('returns to the theme it left, and to day only when nothing lighter is remembered', () => {
+    expect(nightToggleTarget('night-red', 'dusk')).toBe('dusk');
+    expect(nightToggleTarget('night-red', 'day')).toBe('day');
+    expect(nightToggleTarget('night-red', 'night-red')).toBe('day');
   });
 });

@@ -172,6 +172,24 @@ $effect(() => {
   };
 });
 
+// The status bar stays live under every menu: the backdrop stops at its top edge, so a tap there
+// reaches the bar's control instead of the backdrop. That tap also closes the menu, without being
+// swallowed, so MOB is one tap away whatever is open. Taps anywhere else still meet the backdrop.
+// The menu's own opener group (its trigger) and anchor are excluded, since their click toggles it.
+$effect(() => {
+  if (!open) return;
+  const onPointerDown = (event: PointerEvent): void => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest('.status-strip')) return;
+    const surface = surfaceRef;
+    if (surface?.contains(target) || anchor?.contains(target)) return;
+    if (surface?.closest('[data-menu-opener-group]')?.contains(target)) return;
+    onClose();
+  };
+  document.addEventListener('pointerdown', onPointerDown, true);
+  return () => document.removeEventListener('pointerdown', onPointerDown, true);
+});
+
 // Gate registerDismiss on open so the handler is never in the stack while the menu is closed.
 // The weather menu previously registered ungated and relied on conditional mounting; the primitive
 // must not assume that.
@@ -228,9 +246,10 @@ $effect(() => {
   transform-origin: top left;
 }
 /* Override the .overlay-backdrop base (position: absolute) with fixed so the backdrop covers the
-   full viewport regardless of the nearest positioned ancestor. A tap anywhere outside the surface
-   closes the menu. */
+   viewport regardless of the nearest positioned ancestor, down to the status bar's top edge. A tap
+   anywhere outside the surface closes the menu. */
 .anchored-menu-backdrop {
   position: fixed;
+  inset-block-end: var(--bar-block-size, 0px);
 }
 </style>

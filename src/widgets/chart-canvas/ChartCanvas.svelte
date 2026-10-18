@@ -997,7 +997,11 @@ onDestroy(() => {
 
 .context-hint {
   position: absolute;
-  inset-block-start: var(--space-2);
+  inset-block-start: calc(
+    var(--chrome-inset-top) +
+    var(--auth-banner-height, 0px) +
+    var(--space-2)
+  );
   inset-inline-start: 50%;
   z-index: var(--z-overlay);
   inline-size: max-content;

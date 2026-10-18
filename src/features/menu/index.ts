@@ -3,7 +3,8 @@ export type { MenuItem } from './menu-item';
 export { default as PinnedActions } from './PinnedActions.svelte';
 export {
   DEFAULT_PINNED,
-  reorderPinned,
+  pinnedIdsCodec,
+  reorderShownPinned,
   resolvePinned,
   togglePinned,
 } from './pinned-actions';

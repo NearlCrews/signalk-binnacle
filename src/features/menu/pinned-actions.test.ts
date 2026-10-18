@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { MenuItem } from './menu-item';
 import {
   barCapacity,
+  cleanPinned,
   DEFAULT_PINNED,
   MAX_BAR_PILLS,
   MAX_COMPACT_BAR_PILLS,
+  pinnedIdsCodec,
   reorderPinned,
+  reorderShownPinned,
   resolvePinned,
   splitBarActions,
   togglePinned,
@@ -53,8 +56,8 @@ describe('resolvePinned', () => {
 });
 
 describe('DEFAULT_PINNED', () => {
-  it('leads with the Menu opener and keeps one Safety action thumb-reachable', () => {
-    expect([...DEFAULT_PINNED]).toEqual(['menu', 'center', 'follow', 'ais']);
+  it("keeps one Safety action thumb-reachable and never pins the menu, the bar's own end", () => {
+    expect([...DEFAULT_PINNED]).toEqual(['center', 'follow', 'layers', 'ais']);
     // The phone cap is the default set's own length, so no default is pushed behind More.
     expect(DEFAULT_PINNED).toHaveLength(MAX_COMPACT_BAR_PILLS);
   });
@@ -150,5 +153,52 @@ describe('reorderPinned', () => {
   it('returns the same array when the id is not pinned', () => {
     const ids = ['center', 'follow'];
     expect(reorderPinned(ids, 'layers', 0)).toBe(ids);
+  });
+});
+
+describe('reorderShownPinned', () => {
+  it('counts slots on the bar as shown, leaving an unknown id where it was stored', () => {
+    // A newer version's pin the bar cannot show sits first in the stored list.
+    const stored = ['future', 'center', 'follow', 'layers'];
+    const shown = ['center', 'follow', 'layers'];
+    expect(reorderShownPinned(stored, shown, 'follow', 0)).toEqual([
+      'future',
+      'follow',
+      'center',
+      'layers',
+    ]);
+    expect(reorderShownPinned(stored, shown, 'center', 1)).toEqual([
+      'future',
+      'follow',
+      'center',
+      'layers',
+    ]);
+  });
+
+  it('drops a duplicate stored id rather than inventing a slot for it', () => {
+    expect(
+      reorderShownPinned(['center', 'center', 'follow'], ['center', 'follow'], 'follow', 0),
+    ).toEqual(['follow', 'center']);
+  });
+});
+
+describe('retired pins', () => {
+  it("drops the menu, now the bar's own end, and keeps the order", () => {
+    expect(cleanPinned(['menu', 'center', 'ais'])).toEqual(['center', 'ais']);
+    expect(cleanPinned(['center', 'ais'])).toEqual(['center', 'ais']);
+  });
+
+  it('rewrites a stored list that still pins the menu, and never writes one', () => {
+    const codec = pinnedIdsCodec();
+    expect(codec.decode(['menu', 'center', 'follow', 'ais'])).toEqual({
+      state: 'migrated',
+      value: ['center', 'follow', 'ais'],
+    });
+    expect(codec.decode(['center', 'follow'])).toEqual({
+      state: 'valid',
+      value: ['center', 'follow'],
+    });
+    expect(codec.decode([1])).toEqual({ state: 'invalid' });
+    expect(codec.encode?.(['menu', 'center'])).toEqual(['center']);
   });
 });

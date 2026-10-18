@@ -100,6 +100,12 @@
   margin: var(--space-3);
   margin-inline-end: var(--chrome-inset-end);
 }
+/* The chart reaches the top of the screen, so the top controls clear a status bar or cutout there,
+   and sit below the access banner while it is up rather than over its Approve button. The chart
+   host publishes the banner's measured height. */
+.chart-canvas .maplibregl-ctrl-top-right {
+  inset-block-start: calc(var(--chrome-inset-top) + var(--auth-banner-height, 0px));
+}
 /* MapLibre docks its controls to the trailing edge, which is exactly where the note detail panel
    docks, and both sit at the same stacking level, so the panel covered the zoom buttons, the scale
    bar, and the attribution. Shift the control containers clear for as long as that slot is
