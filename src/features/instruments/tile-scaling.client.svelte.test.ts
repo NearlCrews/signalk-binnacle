@@ -1,5 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { page } from 'vitest/browser';
 import INSTRUMENTS_CSS from '../../styles/instruments.css?raw';
 import TOKENS_CSS from '../../styles/tokens.css?raw';
 import NumericTile from './NumericTile.svelte';
@@ -104,5 +105,18 @@ describe('tile hero container scaling', () => {
     const target = mountTileAt(520, 'position');
     expect(heroFontSize(target)).toBeCloseTo(1.25 * REM, 1);
     expect(valueReserve(target)).toBeCloseTo(1.25 * REM * HERO_LEADING, 1);
+  });
+});
+
+describe('instrument tile name', () => {
+  // WCAG 2.5.3: the computed name holds what the tile shows, in the order it shows it, so a
+  // speech-input user can say the value or the abbreviation.
+  it('is the visible readout and label, then the action', async () => {
+    const target = mountTileAt(200);
+    const tile = target.querySelector('.tile');
+    if (!(tile instanceof HTMLElement)) throw new Error('no tile');
+    await expect
+      .element(page.elementLocator(tile))
+      .toHaveAccessibleName(/^7\.4 kn\s+SOG\s+Open details$/);
   });
 });

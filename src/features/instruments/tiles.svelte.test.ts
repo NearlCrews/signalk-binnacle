@@ -41,7 +41,9 @@ describe('NumericTile', () => {
     const html = numericBody({ label: LABEL, reading: LIVE, zone: normal, sensorGloss: GLOSS });
     expect(html).toContain('7.4');
     expect(html).toContain('kn');
-    expect(html).toContain('aria-label="SOG, 7.4 kn. Open details"');
+    // Named by its visible content, never a masking label (WCAG 2.5.3).
+    expect(html).not.toContain('aria-label');
+    expect(html).toContain('<span class="visually-hidden">Open details</span>');
   });
 
   it('renders sensorGloss and hides value span when state is never', () => {
@@ -67,7 +69,7 @@ describe('NumericTile', () => {
     const html = numericBody({ label: LABEL, reading: STALE, zone: normal, sensorGloss: GLOSS });
     expect(html).toContain('tile--stale');
     expect(html).toContain('Stale');
-    expect(html).toContain('stale. Open details');
+    expect(html).toContain('Open details');
   });
 
   it('shows the retained value age while stale', () => {
@@ -113,7 +115,7 @@ describe('NumericTile', () => {
     });
     expect(html).toContain('tile--alarm');
     expect(html).toContain('Alarm');
-    expect(html).toContain('alarm. Open details');
+    expect(html).toContain('Open details');
     expect(html).not.toContain('tile--warning');
   });
 
@@ -178,7 +180,8 @@ describe('WindTile', () => {
     const html = windBody({ label: 'AWS', reading: WIND_LIVE, zone: normal, sensorGloss: GLOSS });
     expect(html).toContain('12.3');
     expect(html).toContain('kn');
-    expect(html).toContain('AWS, 12.3 kn. Open details');
+    expect(html).not.toContain('aria-label');
+    expect(html).toContain('<span class="visually-hidden">Open details</span>');
   });
 
   it('shows formatted angle text beside speed', () => {

@@ -4,7 +4,6 @@ import BatteryBar from './BatteryBar.svelte';
 import RotNeedle from './RotNeedle.svelte';
 import Sparkline from './Sparkline.svelte';
 import TileStateBadge from './TileStateBadge.svelte';
-import { tileAccessibleLabel } from './tile-accessibility';
 import type { TileDef, TileReading } from './tile-catalog';
 
 interface Props {
@@ -39,7 +38,6 @@ const {
 const labelText = $derived(
   `${label}${reading.referenceLabel ? ` (${reading.referenceLabel})` : ''}`,
 );
-const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, sensorGloss));
 </script>
 
 <!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
@@ -53,7 +51,6 @@ const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, s
   class:stale-cue={reading.state === 'stale'}
   class:tile--empty={reading.state === 'never'}
   class:tile--position={kind === 'position'}
-  aria-label={accessibleLabel}
   onclick={onOpen}
 >
   {#if reading.state === 'never'}
@@ -87,4 +84,7 @@ const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, s
     {labelText}</span
   >
   <TileStateBadge state={reading.state} {zone} />
+  <!-- Named by its visible content (WCAG 2.5.3: a speech-input user says what the tile shows, SOG
+       or the value), then the action the tap takes. -->
+  <span class="visually-hidden">Open details</span>
 </button>

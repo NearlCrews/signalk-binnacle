@@ -2,7 +2,6 @@
 import { formatSignedAngleOr, RAD_TO_DEG } from '$shared/lib';
 import type { ZoneState } from '$shared/signalk';
 import TileStateBadge from './TileStateBadge.svelte';
-import { tileAccessibleLabel } from './tile-accessibility';
 import type { TileReading } from './tile-catalog';
 
 interface Props {
@@ -23,7 +22,6 @@ const { label, reading, zone, sensorGloss, kind, abbr, staleAgeText, onOpen }: P
 const labelText = $derived(
   `${label}${reading.referenceLabel ? ` (${reading.referenceLabel})` : ''}`,
 );
-const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, sensorGloss));
 
 // BOW-UP: 0 rad points up. SVG rotate() uses degrees, positive = clockwise.
 const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
@@ -38,7 +36,6 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
   class:stale-cue={reading.state === 'stale'}
   class:tile--empty={reading.state === 'never'}
   class:tile--wide={kind === 'wind'}
-  aria-label={accessibleLabel}
   onclick={onOpen}
 >
   {#if reading.state === 'never'}
@@ -152,6 +149,8 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
   <!-- The angle freshness folds into the one badge line: the needle is already gone, and the
        badge names why, so a live speed beside a missing angle never reads as a broken display. -->
   <TileStateBadge state={reading.state} {zone} angleState={reading.angleState} />
+  <!-- Named by its visible content, as NumericTile is, then the action the tap takes. -->
+  <span class="visually-hidden">Open details</span>
 </button>
 
 <!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
@@ -167,6 +166,13 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* The speed, its unit, and the angle as one baseline row of separate items, so the tile's name reads
+   them as separate words. */
+.speed {
+  display: inline-flex;
+  align-items: baseline;
 }
 
 /* One step above the unit size: the wind angle is operational helm data, not a suffix. */
