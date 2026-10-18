@@ -319,7 +319,8 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   quiet hint for empty states and inline guidance) plus its `--xs` modifier (the same voice one step
   down, for a note sitting under a control rather than beside body text: an input's format hint, a
   privacy line, a radar control's description), `.alert-note` (an outline alarm banner) and its
-  `.alert-note--filled` tinted variant, `.icon-note` (a note led by a status icon, with the text
+  `.alert-note--filled` tinted variant, `.info-note` (its accent counterpart for an offer, an
+  invitation, or an arrival, which must never borrow the alarm color), `.icon-note` (a note led by a status icon, with the text
   wrapping under itself rather than under the icon; composed over the note's own look and severity
   color by the weather warning banners and the degraded-monitor notes), `.action-note` plus its
   `--wrap` modifier (a note that carries its own action inline, so the label and its control share

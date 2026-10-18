@@ -148,7 +148,7 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
 
 <SlideOver title="Help and helm setup" closeLabel="Close help" bodyFlex {onClose} {onBack}>
   {#if firstRun}
-    <div class="alert-note alert-note--filled" role="region" aria-label="Welcome">
+    <div class="info-note welcome" role="region" aria-label="Welcome">
       <p>
         Welcome aboard. Binnacle is an advisory chartplotter for Signal K: it helps you see, plan,
         and stay alert, and it never replaces official charts, a lookout, or redundant navigation.
@@ -342,6 +342,11 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
 </SlideOver>
 
 <style>
+/* The welcome's lone action fills its row under the note text, like every lone action. */
+.welcome {
+  display: grid;
+  gap: var(--space-2);
+}
 .context-list {
   display: flex;
   flex-direction: column;

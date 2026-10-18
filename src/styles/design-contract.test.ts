@@ -165,7 +165,7 @@ describe('design contract: reading rhythm', () => {
   it('gives running text the prose line spacing and avoids orphaned last words', () => {
     expect(tokens).toMatch(/:root \{[^}]*?--leading-prose: 1\.4;/);
     expect(text).toMatch(
-      /p,\s*\.muted-note,\s*\.alert-note \{[^}]*line-height: var\(--leading-prose\);[^}]*text-wrap: pretty;/,
+      /p,\s*\.muted-note,\s*\.alert-note,\s*\.info-note \{[^}]*line-height: var\(--leading-prose\);[^}]*text-wrap: pretty;/,
     );
   });
 

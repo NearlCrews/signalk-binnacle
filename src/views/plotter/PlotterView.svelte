@@ -986,12 +986,14 @@ $effect(() => {
       </div>
     {/if}
     {#if arrivalBanner}
-      <div class="arrival-banner" role="status">Arrived at {arrivalBanner}</div>
+      <div class="info-note toast-banner arrival-banner" role="status">
+        Arrived at {arrivalBanner}
+      </div>
     {/if}
     {#if showHelpWelcome}
       <!-- A compact invitation, never a panel forced over the chart: a helm display must come
            back to the chart on every boot. Dismiss persists on this device. -->
-      <div class="alert-note toast-banner action-note action-note--wrap" role="status">
+      <div class="info-note toast-banner action-note action-note--wrap" role="status">
         <span>First time with Binnacle? Read the short safety orientation, or set up charts.</span>
         <!-- The new navigator's actual first question is where the charts are, and the reference
              base map alone never answers it. -->
@@ -1009,7 +1011,7 @@ $effect(() => {
     {#if showEncPrompt}
       <!-- The boat is inside NOAA's published chart coverage with no nautical chart on, which is
            the one case the app can fix in a tap. Dismiss persists on this device. -->
-      <div class="alert-note toast-banner action-note action-note--wrap" role="status">
+      <div class="info-note toast-banner action-note action-note--wrap" role="status">
         <span>The official US nautical charts (NOAA ENC) cover these waters.</span>
         <div class="action-group">
           <button type="button" class="btn btn-primary" onclick={onEnableNoaaEnc}>
@@ -2441,18 +2443,8 @@ $effect(() => {
   pointer-events: none;
   z-index: var(--z-safety-strips);
 }
+/* The arrival is an .info-note toast; only its weight is its own. */
 .arrival-banner {
-  pointer-events: auto;
-  inline-size: fit-content;
-  max-inline-size: calc(100% - var(--space-6));
-  padding: var(--space-2) var(--space-4);
-  background: var(--accent-tint);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-overlay);
-  /* --accent-tint-text stays the ordinary body color except in night-red, where it borrows
-     --accent instead (tokens.css): plain --text fails AA on this accent-tinted fill there. */
-  color: var(--accent-tint-text);
   font-weight: 600;
 }
 /* The toast reuses the shared .alert-note--filled treatment; only sizing and shadow are local. */

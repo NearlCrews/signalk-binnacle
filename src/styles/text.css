@@ -5,7 +5,8 @@
    never strands a single word. */
 p,
 .muted-note,
-.alert-note {
+.alert-note,
+.info-note {
   line-height: var(--leading-prose);
   text-wrap: pretty;
 }
@@ -65,6 +66,22 @@ p,
    palette, so the hazard banner text borrows it instead of the ordinary body color. */
 :root[data-theme="night-red"] .alert-note--filled {
   color: var(--alarm);
+}
+
+/* The informational counterpart of .alert-note: an accent border over the accent tint, for an offer,
+   an invitation, or an arrival (the first-run welcome, the NOAA ENC offer) that must never borrow the
+   alarm color. --accent-tint-text keeps AA contrast on the tint in every theme, night-red included. */
+.info-note {
+  margin: 0;
+  padding: 0.4rem var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-tint);
+  color: var(--accent-tint-text);
+  font-size: var(--text-sm);
+}
+.info-note p {
+  margin: 0;
 }
 
 /* The quiet muted hint the panels show for empty states and inline guidance, one rule so the
