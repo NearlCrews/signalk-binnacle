@@ -12,6 +12,17 @@
   grid-auto-columns: 1fr;
   gap: var(--space-2);
 }
+/* A banner's actions (the chart's top offers and toasts, the access banner, the sunset offer) take
+   their own full line as rows of equal cells that wrap whole once the banner's host, which declares
+   the `banner` container, is too narrow to set them side by side: a phone, or large text. In rem, so
+   the switch follows the text size. */
+@container banner (max-width: 30rem) {
+  .action-group {
+    flex-basis: 100%;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
+  }
+}
 /* A button whose words swap (an armed confirm: Raise anchor, then Confirm raise?) reserves the width
    of its other label, named in data-reserve, so arming changes only the words and never moves the
    button or its neighbors. The label sits in its own span; the reserve is hidden generated content,

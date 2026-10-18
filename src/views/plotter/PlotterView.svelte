@@ -2433,6 +2433,7 @@ $effect(() => {
    pointer-events: none so it never blocks map taps; each banner opts back into pointer-events:
    auto for its own content-sized box. */
 .top-banner-stack {
+  container: banner / inline-size;
   position: absolute;
   inset-block-start: calc(var(--space-3) + var(--auth-banner-height, 0px));
   inset-inline: 0;

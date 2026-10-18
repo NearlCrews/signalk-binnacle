@@ -9,6 +9,7 @@ import {
   FIXTURE_ORIGIN,
   openMenuItem,
   requireBox,
+  setRootFontSize,
   stubVesselsSelf,
   waitForSignalKConnection,
 } from './helpers';
@@ -689,6 +690,26 @@ test('keeps a slim top bar with MOB centered and the brand for assistive tech on
   expect(Math.round(bar.height)).toBe(Math.round(mob.height) + 9);
   expect(Math.abs(mob.x + mob.width / 2 - 512)).toBeLessThanOrEqual(1);
 });
+
+for (const width of [320, 360]) {
+  test(`a first-run banner at 200-percent text and ${width}px wraps its actions whole`, async ({
+    page,
+  }) => {
+    // The welcome banner's three actions are one equal group; on a narrow host at large text the
+    // group must drop to rows of whole buttons rather than spill off both screen edges.
+    await page.setViewportSize({ width, height: 800 });
+    await setRootFontSize(page, 200);
+    await stubVesselsSelf(page);
+    await page.addInitScript(() => localStorage.clear());
+    await page.goto('/');
+    const banner = page.locator('.toast-banner').filter({ hasText: 'First time with Binnacle?' });
+    await expect(banner).toBeVisible({ timeout: 20_000 });
+    for (const action of await banner.getByRole('button').all()) {
+      await expectInsideViewport(action, page);
+    }
+    await expectNoHorizontalOverflow(page.locator('body'));
+  });
+}
 
 test('a crowded top bar gives way whole chips and never covers MOB', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));

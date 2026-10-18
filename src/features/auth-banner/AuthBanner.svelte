@@ -135,6 +135,7 @@ const { auth, requestsUrl, insecureTransport = false, onDismissInsecure }: Props
 
 <style>
 .auth-banner {
+  container: banner / inline-size;
   padding: var(--space-2) var(--chrome-inset-end) var(--space-2) var(--chrome-inset-start);
   font-size: var(--text-base);
   background: var(--surface-raised);
