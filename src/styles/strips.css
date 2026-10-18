@@ -85,7 +85,7 @@
   font-size: var(--text-base);
   font-weight: 600;
 }
-/* The wide variant for a strip whose controls need the room (Measure's leg table and its five
+/* The wide variant for a strip whose controls need the room (Measure's leg table and its point
    actions): widens through the same token the base width formula reads, so the edge inset stays
    the shared one. */
 .bottom-strip--wide {

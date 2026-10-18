@@ -187,26 +187,39 @@ $effect(() => {
             {/each}
           </select>
         </label>
+        <!-- While a move is armed, the chart-center commit takes the stepping pair's cells (a step
+             would cancel the move anyway), so the toggle and Delete keep their slots and arming
+             never grows the strip over the point being moved. -->
         <div class="panel-controls point-actions">
-          <button
-            type="button"
-            class="btn btn-pill btn-strip"
-            aria-label="Previous measurement point"
-            disabled={measure.selectedIndex === undefined || measure.selectedIndex === 0}
-            onclick={() => measure.selectPrevious()}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            class="btn btn-pill btn-strip"
-            aria-label="Next measurement point"
-            disabled={measure.selectedIndex === undefined ||
-              measure.selectedIndex === measure.vertices.length - 1}
-            onclick={() => measure.selectNext()}
-          >
-            Next
-          </button>
+          {#if measure.moveArmed && onMoveSelectedToCenter}
+            <button
+              type="button"
+              class="btn btn-pill btn-strip step-pair"
+              onclick={onMoveSelectedToCenter}
+            >
+              Move to chart center
+            </button>
+          {:else}
+            <button
+              type="button"
+              class="btn btn-pill btn-strip"
+              aria-label="Previous measurement point"
+              disabled={measure.selectedIndex === undefined || measure.selectedIndex === 0}
+              onclick={() => measure.selectPrevious()}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="btn btn-pill btn-strip"
+              aria-label="Next measurement point"
+              disabled={measure.selectedIndex === undefined ||
+                measure.selectedIndex === measure.vertices.length - 1}
+              onclick={() => measure.selectNext()}
+            >
+              Next
+            </button>
+          {/if}
           <button
             type="button"
             class="btn btn-pill btn-strip"
@@ -216,11 +229,6 @@ $effect(() => {
           >
             {measure.moveArmed ? 'Cancel move' : 'Move point'}
           </button>
-          {#if measure.moveArmed && onMoveSelectedToCenter}
-            <button type="button" class="btn btn-pill btn-strip" onclick={onMoveSelectedToCenter}>
-              Move to chart center
-            </button>
-          {/if}
           <button
             type="button"
             class="btn btn-pill btn-strip btn-danger"
@@ -324,6 +332,17 @@ $effect(() => {
 }
 .point-actions {
   flex: 1 1 22rem;
+  container: point-actions / inline-size;
+}
+.step-pair {
+  grid-column: span 2;
+}
+/* Two 8.5rem panel-control columns and their gap: below that the grid has one column, where a span
+   would add a phantom track. */
+@container point-actions (max-width: 17.49rem) {
+  .step-pair {
+    grid-column: auto;
+  }
 }
 .edit-row .btn-strip,
 .panel-controls .btn-strip {

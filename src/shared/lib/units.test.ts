@@ -155,6 +155,16 @@ describe('metersOrNmParts', () => {
     expect(metersOrNmParts(30, 'imperial')).toEqual({ value: '98', unit: 'ft' });
   });
 
+  it('steps precision down as a distance grows so it fits one column', () => {
+    const nm = (value: number) => value * 1852;
+    expect(metersOrNmParts(nm(99.994)).value).toBe('99.99');
+    expect(metersOrNmParts(nm(99.996)).value).toBe('100.0');
+    expect(metersOrNmParts(nm(765.36)).value).toBe('765.4');
+    expect(metersOrNmParts(nm(999.94)).value).toBe('999.9');
+    expect(metersOrNmParts(nm(999.96)).value).toBe('1000');
+    expect(metersOrNmParts(nm(1480.56), 'imperial')).toEqual({ value: '1481', unit: 'nm' });
+  });
+
   it('carries no unit beside the placeholder', () => {
     expect(metersOrNmParts(undefined)).toEqual({ value: '--', unit: '' });
   });

@@ -342,10 +342,18 @@ export function metersOrNmParts(
     if (meters < IMPERIAL_NM_FLOOR_METERS) {
       return { value: `${Math.round(meters / METERS_PER_FOOT)}`, unit: 'ft' };
     }
-    return { value: formatNm(meters), unit: 'nm' };
+    return { value: formatNm(meters, nmDigits(meters)), unit: 'nm' };
   }
   if (meters < METERS_PER_NAUTICAL_MILE) return { value: `${Math.round(meters)}`, unit: 'm' };
-  return { value: formatNm(meters), unit: 'nm' };
+  return { value: formatNm(meters, nmDigits(meters)), unit: 'nm' };
+}
+
+// Precision steps down as the distance grows (12.34, 123.4, 1234), so a reading stays within five
+// characters and fits one data-cell column. The thresholds sit where rounding would carry a digit.
+function nmDigits(meters: number): number {
+  const nm = meters / METERS_PER_NAUTICAL_MILE;
+  if (nm >= 999.95) return 0;
+  return nm >= 99.995 ? 1 : 2;
 }
 
 export function formatTcpaMin(seconds: number, digits = 0): string {

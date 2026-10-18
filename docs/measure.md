@@ -20,7 +20,9 @@ restricted areas, or the vessel's maneuvering limits.
    Measure and remove every temporary point.
 
 For a keyboard movement path, select the point in the strip, choose **Move point**, focus and pan the
-chart with MapLibre's keyboard controls, then choose **Move to chart center**.
+chart with MapLibre's keyboard controls, then choose **Move to chart center**. While a move is armed,
+**Move to chart center** takes the place of **Previous** and **Next**, since stepping to another
+point would cancel the move, so the strip keeps its height and **Delete point** keeps its place.
 
 For precise entry without dragging, open **Enter measurement coordinates**. Enter latitude and
 longitude in decimal degrees, then choose **Add measurement point** or **Move point to coordinates**
