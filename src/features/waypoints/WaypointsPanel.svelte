@@ -359,7 +359,7 @@ $effect(() => {
         </div>
       </dl>
       {#if waypoint.description}
-        <p class="description">{waypoint.description}</p>
+        <p class="muted-note description">{waypoint.description}</p>
       {/if}
       {#if confirmingNavigate?.id === waypoint.id}
         <InlineConfirm
@@ -431,9 +431,6 @@ $effect(() => {
    system in app.css, the search field from the shared SearchInput primitive, and the sort header from
    the global .nav-sort class; only the optional description line is Waypoints-specific. */
 .description {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
   overflow-wrap: anywhere;
 }
 /* The tappable name is the locate action; the box, button reset, and the hover-to-accent

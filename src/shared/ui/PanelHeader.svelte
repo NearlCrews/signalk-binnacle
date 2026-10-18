@@ -58,7 +58,7 @@ const {
       title={backLabel}
       onclick={onBack}
     >
-      <ArrowLeft size={20} aria-hidden="true" />
+      <ArrowLeft size={18} aria-hidden="true" />
     </button>
   {/if}
   <div class="heading">
@@ -116,8 +116,13 @@ const {
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
-/* A two-line heading aligns to the top of the header instead of vertical center. */
+/* A two-line heading aligns to the top of the header instead of vertical center, and its title line
+   drops to the controls' center, so the title sits on the same line in every panel header whether
+   or not a subtitle follows it. */
 .panel-header--stacked {
   align-items: flex-start;
+}
+.panel-header--stacked .panel-title {
+  margin-block-start: max(0px, calc((var(--control-size) - 1lh) / 2));
 }
 </style>

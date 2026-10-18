@@ -342,7 +342,7 @@ function useProfile(id: string): void {
               title={`Use ${profile.name} on this device`}
               onclick={() => useProfile(profile.id)}
             >
-              <Check size={18} aria-hidden="true" />
+              <Check size={16} aria-hidden="true" />
               Use profile
             </button>
           {/if}

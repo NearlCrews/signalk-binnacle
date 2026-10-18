@@ -100,7 +100,12 @@ function cancelClear(): void {
       <dt>Storage used</dt>
       <dd>
         <span class="num">{used?.value ?? '--'}</span>
-        <span class="unit">{used?.unit ?? ''} of {cap?.value ?? '--'} {cap?.unit ?? ''}</span>
+        <span class="unit">{used?.unit ?? ''}</span>
+      </dd>
+      <dt>Storage limit</dt>
+      <dd>
+        <span class="num">{cap?.value ?? '--'}</span>
+        <span class="unit">{cap?.unit ?? ''}</span>
       </dd>
       <dt>Saved areas</dt>
       <dd>

@@ -3,6 +3,7 @@ import ChevronRight from '@lucide/svelte/icons/chevron-right';
 import Download from '@lucide/svelte/icons/download';
 import DownloadCloud from '@lucide/svelte/icons/download-cloud';
 import Files from '@lucide/svelte/icons/files';
+import HardDrive from '@lucide/svelte/icons/hard-drive';
 import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import SquareDashed from '@lucide/svelte/icons/square-dashed';
 import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -410,6 +411,7 @@ function chartLabel(id: string): string {
       class="subview-link row-interactive"
       onclick={() => controller.showSubView('auto')}
     >
+      <DownloadCloud size={18} aria-hidden="true" />
       <span class="subview-link-label">Automatic caching</span>
       <span class="subview-link-value"
         >{controller.positionLoading
@@ -433,11 +435,12 @@ function chartLabel(id: string): string {
       class="subview-link row-interactive"
       onclick={() => controller.showSubView('storage')}
     >
+      <HardDrive size={18} aria-hidden="true" />
       <span class="subview-link-label">Storage</span>
-      <span class="subview-link-value">
-        {usedFmt?.value ?? '--'} {usedFmt?.unit ?? ''} of {capFmt?.value ?? '--'}
-        {capFmt?.unit ?? ''}
-      </span>
+      <span class="subview-link-value"
+        ><span class="num">{usedFmt?.value ?? '--'}</span> {usedFmt?.unit ?? ''} of
+        <span class="num">{capFmt?.value ?? '--'}</span> {capFmt?.unit ?? ''}</span
+      >
       <ChevronRight class="subview-link-chevron" size={18} aria-hidden="true" />
     </button>
   {:else if subView === 'build'}

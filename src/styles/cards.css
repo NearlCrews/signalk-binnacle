@@ -10,6 +10,9 @@
   flex-direction: column;
   gap: 0.3rem;
 }
+.saved > h3 {
+  margin: 0;
+}
 .saved .empty {
   margin: 0;
   color: var(--text-muted);

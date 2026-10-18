@@ -29,7 +29,7 @@ const headingId = $props.id();
 
 <div class="saved">
   {#if heading}
-    <span class="caps-label" id={headingId}>{heading}</span>
+    <h3 class="caps-label" id={headingId}>{heading}</h3>
   {/if}
   {#if items.length === 0}
     {#if empty.kind === 'loading'}

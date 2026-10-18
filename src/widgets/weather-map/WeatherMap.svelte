@@ -570,35 +570,60 @@ onDestroy(() => {
         onfocusout={pointReadout.release}
       >
         {#if readout}
-          <span class="readout-line">
-            Wind <b class="num">{formatSpeedOr(readout.speedMs, units.profile, 0)}</b>
-            {speedUnit(units.profile)}
-            from
-            <b class="num">{formatBearingOr(readout.fromRad)}</b>&deg;T
+          <!-- The tapped point's conditions as data cells, so each value keeps its unit and wraps as a
+               whole cell, on the status bar's column module and value size. -->
+          {#snippet cell(
+            label: string,
+            value: string,
+            unit: string,
+          )}
+            <span class="data-cell">
+              <span class="data-cell-label">{label}</span>
+              <span class="data-cell-value"><b class="num">{value}</b> <span>{unit}</span></span>
+            </span>
+          {/snippet}
+          <span class="readout-cells">
+            {@render cell(
+              'Wind',
+              formatSpeedOr(readout.speedMs, units.profile, 0),
+              speedUnit(units.profile),
+            )}
+            {@render cell('From', formatBearingOr(readout.fromRad), '°T')}
             {#if readout.gustMs !== undefined}
-              gust <b class="num">{formatSpeedOr(readout.gustMs, units.profile, 0)}</b>
-              {speedUnit(units.profile)}
+              {@render cell(
+                'Gust',
+                formatSpeedOr(readout.gustMs, units.profile, 0),
+                speedUnit(units.profile),
+              )}
             {/if}
             {#if showField(WEATHER_LAYER_IDS.pressure) && readout.pressurePa !== undefined}
-              &middot; <b class="num">{formatPressureOr(readout.pressurePa, units.profile)}</b>
-              {pressureUnit(units.profile)}
+              {@render cell(
+                'Pressure',
+                formatPressureOr(readout.pressurePa, units.profile),
+                pressureUnit(units.profile),
+              )}
             {/if}
             {#if showField(WEATHER_LAYER_IDS.waves) && readout.waveHeightM !== undefined}
-              &middot; waves <b class="num">{formatLengthOr(readout.waveHeightM, units.profile)}</b>
-              {lengthUnit(units.profile)}
+              {@render cell(
+                'Waves',
+                formatLengthOr(readout.waveHeightM, units.profile),
+                lengthUnit(units.profile),
+              )}
               {#if readout.wavePeriodS !== undefined}
-                / <b class="num">{formatFixed(readout.wavePeriodS, 1)}</b> s
+                {@render cell('Period', formatFixed(readout.wavePeriodS, 1), 's')}
               {/if}
               {#if readout.waveFromRad !== undefined}
-                from <b class="num">{formatBearingOr(readout.waveFromRad)}</b>&deg;T
+                {@render cell('Wave from', formatBearingOr(readout.waveFromRad), '°T')}
               {/if}
             {/if}
             {#if showPrecipOrRadar &&
               readout.precipitationMm !== undefined &&
               readout.precipitationMm >= RAIN_VISIBLE_MM_H}
-              &middot; rain
-              <b class="num">{formatPrecipRateOr(readout.precipitationMm, units.profile)}</b>
-              {precipUnitLabel(readout.precipIsRate, units.profile)}
+              {@render cell(
+                'Rain',
+                formatPrecipRateOr(readout.precipitationMm, units.profile),
+                precipUnitLabel(readout.precipIsRate, units.profile),
+              )}
             {/if}
           </span>
           {#if readoutSource}
@@ -631,7 +656,7 @@ onDestroy(() => {
             disabled={!online}
             onclick={() => loadCurrentWeather(items, true)}
           >
-            <RefreshCw size={14} aria-hidden="true" />
+            <RefreshCw size={16} aria-hidden="true" />
             Retry
           </button>
         {/if}
@@ -814,6 +839,14 @@ onDestroy(() => {
   position: relative;
   padding-inline-end: var(--space-5);
   color: var(--text);
+}
+.readout-cells {
+  display: flex;
+  flex-wrap: wrap;
+}
+.readout-cells .data-cell {
+  inline-size: var(--data-cell-min);
+  border-inline-start: 0;
 }
 .readout-source {
   display: block;

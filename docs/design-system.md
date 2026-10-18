@@ -1036,10 +1036,11 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 
 ## 10. Icons
 
-- App chrome uses `@lucide/svelte` components, sized in px (`size={16}` for inline, `size={18}` for a
-  prominent control), always `aria-hidden="true"` when a text label is present. `size={20}` is
-  reserved for a handful of oversized hero controls (a panel's back arrow, the app menu trigger, the
-  MOB confirm icon), never a default. Pick an icon that reads true: AIS targets is a ship, the radar
+- App chrome uses `@lucide/svelte` components, sized in px by role, always `aria-hidden="true"` when
+  a text label is present: `size={16}` inside a text `.btn`, `size={18}` for an icon-only control in a
+  header or row (a panel's back, close, minimize, and overflow controls share it, so a header row
+  never mixes sizes) and for a row-styled button, and `size={20}` only for the top bar's icon pills
+  (the app menu trigger and the theme toggle) and the MOB confirm icon, never a default. Pick an icon that reads true: AIS targets is a ship, the radar
   is the radar sweep glyph, an anchor is an anchor.
 - Chart symbols are a separate system: they derive from the S-52 Presentation Library and OpenBridge,
   not from the UI icon set. That pipeline is a later spec.

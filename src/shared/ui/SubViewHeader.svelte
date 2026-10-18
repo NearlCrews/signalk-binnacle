@@ -15,7 +15,7 @@ const { title, backLabel = 'Back', onBack }: Props = $props();
 
 <header class="subview-header">
   <button type="button" class="icon-btn icon-btn--accent" aria-label={backLabel} onclick={onBack}>
-    <ArrowLeft size={20} aria-hidden="true" />
+    <ArrowLeft size={18} aria-hidden="true" />
   </button>
   <h3 class="panel-title panel-title--sub">{title}</h3>
 </header>

@@ -94,6 +94,7 @@ let tuneTrigger = $state<HTMLButtonElement>();
 let tuneControl = $state<HTMLInputElement>();
 let wasTuneOpen = false;
 const itemUnavailableId = $derived(`layer-${item.id}-unavailable`);
+const tunePercentId = $derived(`layer-${item.id}-opacity`);
 
 // A facet child's accessible description points at whichever hint explains why it is disabled: its
 // own provider-absent hint when the child is unavailable, otherwise the parent's hint when only the
@@ -147,16 +148,22 @@ $effect(() => {
   <div class="trail">
     {#if canTune}
       <div class="tune-anchor">
+        <!-- A dimmed layer reads its opacity on the row: the percentage stacks under the icon inside
+             the same 44px button, so the row keeps its shape. -->
         <button
           type="button"
-          class="icon-btn"
+          class="icon-btn tune-btn"
           bind:this={tuneTrigger}
           class:icon-btn--accent={dimmed}
           aria-label={`Adjust ${item.title} opacity`}
+          aria-describedby={dimmed ? tunePercentId : undefined}
           aria-expanded={tuneOpen}
           onclick={() => (tuneOpen = !tuneOpen)}
         >
           <SlidersHorizontal size={18} aria-hidden="true" />
+          {#if dimmed}
+            <span class="num tune-pct" id={tunePercentId}>{percent}%</span>
+          {/if}
         </button>
         <AnchoredMenu
           open={tuneOpen}
@@ -325,6 +332,14 @@ $effect(() => {
 }
 .tune-slot {
   inline-size: var(--control-size);
+}
+.tune-btn {
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.tune-pct {
+  font-size: var(--text-xs);
+  line-height: 1;
 }
 /* The opacity popover, anchored under the tune button at the row's trailing edge. The floating-card
    frame comes from the shared .popover-card; this only positions and sizes it. */

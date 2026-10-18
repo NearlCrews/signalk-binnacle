@@ -134,7 +134,7 @@ const reportText = $derived.by(() => {
       </button>
       <button
         type="button"
-        class="btn sev-danger"
+        class="btn btn-danger"
         disabled={working !== undefined}
         bind:this={eraseTrigger}
         onclick={() => (confirming = 'all')}

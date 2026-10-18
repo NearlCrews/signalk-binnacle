@@ -228,7 +228,10 @@ function valueText(section: Section, index: number): string {
         <h3 class="caps-label">{section.item.label}</h3>
         {#if hasData}
           <span class="latest">
-            <b class="num">{valueAt(section, index)}</b>{unitSuffix(section)}
+            <b class="num">{valueAt(section, index)}</b>
+            {#if section.unit}
+              <span class="unit">{section.unit}</span>
+            {/if}
             <span class="at">at {formatClockTime(section.times[index] * 1000)}</span>
           </span>
         {/if}
@@ -308,6 +311,9 @@ function valueText(section: Section, index: number): string {
 .latest b {
   color: var(--text);
   font-size: var(--text-base);
+}
+.latest .unit {
+  font-size: var(--text-xs);
 }
 .at {
   margin-inline-start: var(--space-1);
