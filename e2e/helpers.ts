@@ -194,15 +194,23 @@ export async function colorShare(
   );
 }
 
-// The active starter profile applies its own theme on boot, so switch through the toolbar button,
-// which cycles day, dusk, and night-red.
+const THEME_NAMES = { day: 'Day', dusk: 'Dusk', 'night-red': 'Night' } as const;
+
+// The active starter profile applies its own theme on boot, so switch through Display's Day, Dusk,
+// and Night choice, then close the panel so the chart is as the caller left it.
 export async function switchToTheme(
   page: Page,
   theme: 'day' | 'dusk' | 'night-red',
 ): Promise<void> {
-  for (let i = 0; i < 3; i += 1) {
-    if ((await page.evaluate(() => document.documentElement.dataset.theme)) === theme) break;
-    await page.getByRole('button', { name: /^Switch theme/ }).click();
+  if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== theme) {
+    // The tile's name carries its second line, so match its leading word.
+    await openMenuItem(page, /^Display/);
+    await page
+      .getByRole('group', { name: 'Theme', exact: true })
+      .getByRole('button', { name: THEME_NAMES[theme], exact: true })
+      .click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.slide-over:visible')).toHaveCount(0);
   }
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
 }

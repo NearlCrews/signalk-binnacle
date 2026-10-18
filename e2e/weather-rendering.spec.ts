@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openMenuItem, stubVesselsSelf } from './helpers';
+import { openMenuItem, stubVesselsSelf, switchToTheme } from './helpers';
 
 for (const scenario of [
   { theme: 'day', layer: 'wind', motion: 'no-preference' },
@@ -66,14 +66,14 @@ for (const scenario of [
       });
     });
     await page.goto('/');
-    // Let the fresh-device profile settle before choosing the scenario's theme.
+    // Let the fresh-device profile settle before choosing the scenario's theme: the Profiles tile
+    // names it once it applies.
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await expect(
-      page.getByRole('button', { name: 'Profile Coastal day, switch profile' }),
-    ).toBeVisible();
-    const themeToggle = page.getByRole('button', { name: /Switch theme/ });
-    for (let step = 0; step < ['day', 'dusk', 'night-red'].indexOf(scenario.theme); step++)
-      await themeToggle.click();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', scenario.theme);
+      page.locator('#app-menu-launcher').getByRole('button', { name: /^Profiles/ }),
+    ).toContainText('Active: Coastal day');
+    await page.keyboard.press('Escape');
+    await switchToTheme(page, scenario.theme);
     await openMenuItem(page, 'Forecast');
     const panel = page.locator('#weather-panel');
     await expect(panel).toBeVisible();

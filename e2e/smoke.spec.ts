@@ -5,6 +5,7 @@ import {
   expectNoHorizontalOverflow,
   openMenuItem,
   stubVesselsSelf,
+  switchToTheme,
 } from './helpers';
 import { installMapLibreWorkerProof } from './maplibre-worker-proof';
 
@@ -60,8 +61,8 @@ async function mockChartLocker(page: Page, regions: unknown[] = []): Promise<voi
 test('app shell renders the brand and a connection status', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.brand')).toContainText('Binnacle Chartplotter');
-  await expect(page.locator('.status-strip .conn')).toHaveAttribute(
-    'title',
+  // The Status cell's always-mounted connection region names the stream phase.
+  await expect(page.locator('.status-strip .conn-live')).toHaveText(
     /Connecting|Connected|Reconnecting|Not connected/,
   );
   await expect(page.getByText('SOG')).toBeVisible();
@@ -328,8 +329,8 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
   await menu.getByRole('button', { name: 'Customize toolbar' }).click();
   await menu.getByRole('button', { name: 'Reset toolbar' }).click();
   await menu.getByRole('button', { name: 'Reset', exact: true }).click();
-  // The default set is Menu, Center, Follow, and AIS; moving Follow up swaps it with Center.
-  await menu.getByRole('button', { name: /Move Follow boat, position 3 of 4/ }).press('ArrowUp');
+  // The default set is Center, Follow, Charts, and AIS; moving Follow up swaps it with Center.
+  await menu.getByRole('button', { name: /Move Follow boat, position 2 of 4/ }).press('ArrowUp');
 
   await expect
     .poll(async () =>
@@ -337,7 +338,7 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
         .locator('footer .strip-center > button')
         .evaluateAll((buttons) => buttons.map((button) => button.textContent?.trim())),
     )
-    .toEqual(['Menu', 'Follow', 'Center', 'AIS']);
+    .toEqual(['Follow', 'Center', 'Charts', 'AIS']);
 
   await menu.getByRole('button', { name: 'Done' }).click();
   // Scroll the blocked tile into view BEFORE measuring: the launcher scrolls now that it holds
@@ -705,14 +706,12 @@ test('offline area review shows a planning estimate and catalog chart defaults',
   await mockChartLocker(page);
 
   await page.goto('/');
-  await expect(page.getByTitle('Offline charts: online, cache 0 B')).toBeVisible({
-    timeout: 10_000,
-  });
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  // The tile's second line reports what Chart Locker's health poll found.
   const offline = page.locator('#app-menu-launcher').getByRole('button', {
-    name: 'Offline charts',
-    exact: true,
+    name: /^Offline charts/,
   });
+  await expect(offline).toContainText('0 B cached', { timeout: 10_000 });
   await expect(offline).toBeEnabled({ timeout: 10_000 });
   await offline.click();
 
@@ -767,10 +766,13 @@ test('offline areas explain removed chart sources before re-download', async ({ 
   ]);
 
   await page.goto('/');
-  await expect(page.getByTitle('Offline charts: online, cache 0 B')).toBeVisible({
-    timeout: 10_000,
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  const offline = page.locator('#app-menu-launcher').getByRole('button', {
+    name: /^Offline charts/,
   });
-  await openMenuItem(page, 'Offline charts');
+  await expect(offline).toContainText('0 B cached', { timeout: 10_000 });
+  await expect(offline).toBeEnabled({ timeout: 10_000 });
+  await offline.click();
 
   const panel = page.getByRole('complementary', { name: 'Offline charts' });
   await expect(
@@ -1359,10 +1361,13 @@ test('trend charts stay scrub-accessible and night-readable on a 320 px phone', 
   await expectNoHorizontalOverflow(page.locator('body'));
   await expectNoHorizontalOverflow(panel);
 
-  const themeToggle = page.getByRole('button', { name: /Switch theme/ });
-  await themeToggle.click();
-  await themeToggle.click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night-red');
+  // The theme changes from the menu, which full-screen trends covers: leave, switch, and return.
+  await panel.getByRole('button', { name: 'Close trends, return to chart' }).click();
+  await switchToTheme(page, 'night-red');
+  await openMenuItem(page, 'Data trends');
+  await expect(panel.getByRole('slider', { name: 'Browse Depth history' })).toBeVisible({
+    timeout: 10_000,
+  });
   await expect
     .poll(() =>
       panel.locator('.trend-chart canvas').evaluateAll((canvases) =>

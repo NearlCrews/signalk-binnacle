@@ -39,19 +39,20 @@ test('reorders toolbar actions by taps and restores focus after canceling reset'
   await expect(moveUp).toBeFocused();
   await expectHelmHitTarget(moveUp);
   await moveUp.click();
+  // The default bar is Center, Follow, Charts, and AIS, so Follow moves to the front.
   await expect(
-    launcher.getByRole('button', { name: 'Move Follow boat, position 2 of 4', exact: true }),
+    launcher.getByRole('button', { name: 'Move Follow boat, position 1 of 4', exact: true }),
   ).toBeVisible();
   await expect(menu).not.toBeVisible();
   await expect(
-    launcher.getByRole('button', { name: 'Move Follow boat, position 2 of 4', exact: true }),
+    launcher.getByRole('button', { name: 'Move Follow boat, position 1 of 4', exact: true }),
   ).toBeFocused();
   const reset = launcher.getByRole('button', { name: 'Reset toolbar' });
   await reset.click();
   await launcher.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(reset).toBeFocused();
   await expect(
-    launcher.getByRole('button', { name: 'Move Follow boat, position 2 of 4', exact: true }),
+    launcher.getByRole('button', { name: 'Move Follow boat, position 1 of 4', exact: true }),
   ).toBeVisible();
 });
 
@@ -84,8 +85,8 @@ for (const viewport of [
       await stubVesselsSelf(page);
       await page.goto(FIXTURE_ORIGIN);
       await waitForSignalKConnection(page);
-      // The no-fix grace state grows the strip, so settle it before scrolling panel controls.
-      await expect(page.getByRole('status').filter({ hasText: 'Waiting for GPS' })).toBeVisible({
+      // Settle the no-fix grace state before scrolling panel controls.
+      await expect(page.locator('.status-strip .status-cell')).toContainText('No GPS', {
         timeout: 15_000,
       });
       await page.evaluate((size) => {
@@ -122,7 +123,7 @@ for (const viewport of [
           await expectHelmHitTarget(bodyAction);
           await expectHelmHitTarget(
             page
-              .locator('header')
+              .locator('.status-strip')
               .getByRole('button', { name: 'MOB: mark man overboard here', exact: true }),
           );
         } else {
@@ -130,7 +131,7 @@ for (const viewport of [
           await instrument.scrollIntoViewIfNeeded();
           await expectHelmHitTarget(instrument);
           await expectHelmHitTarget(
-            (viewport.width <= 600 ? panel : page.locator('header')).getByRole('button', {
+            (viewport.width <= 600 ? panel : page.locator('.status-strip')).getByRole('button', {
               name: 'MOB: mark man overboard here',
               exact: true,
             }),
@@ -263,10 +264,10 @@ test('restores night-red before interaction and updates browser chrome', async (
   await expect(
     page.getByRole('heading', { level: 1, name: /Binnacle Chartplotter/ }),
   ).toBeAttached();
-  await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
-  const themeToggle = page.getByRole('button', { name: /Switch theme/ });
-  await themeToggle.focus();
-  await expect(themeToggle).toHaveCSS('outline-width', '2px');
+  const menu = page.getByRole('button', { name: 'Menu', exact: true });
+  await expect(menu).toBeVisible();
+  await menu.focus();
+  await expect(menu).toHaveCSS('outline-width', '2px');
 });
 
 test('keeps primary phone controls touch-sized without horizontal overflow', async ({ page }) => {
@@ -274,7 +275,7 @@ test('keeps primary phone controls touch-sized without horizontal overflow', asy
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
 
-  for (const control of await page.locator('header button:visible').all()) {
+  for (const control of await page.locator('.status-strip button:visible').all()) {
     const box = await control.boundingBox();
     if (!box) continue;
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -293,7 +294,9 @@ test('keeps the MOB key and active controls contrast-safe in the marine palettes
   });
   await page.reload();
 
-  const mob = page.locator('header').getByRole('button', { name: 'MOB: mark man overboard here' });
+  const mob = page
+    .locator('.status-strip')
+    .getByRole('button', { name: 'MOB: mark man overboard here' });
   await expect(mob).toBeVisible({ timeout: 20_000 });
   expect(await contrastRatio(mob)).toBeGreaterThanOrEqual(4.5);
 
@@ -358,13 +361,13 @@ test('keeps the status-strip Chart cell a full target without widening the strip
     .click();
 
   // The Chart cell is its own action, the one-tap return to north up, so the whole cell is the
-  // full touch target; with no COG yet it states the fallback on the caution line.
+  // full touch target; with no COG yet the Status cell states the fallback.
   const cell = page.locator('.status-strip .orientation-readout');
   await expect(cell).toBeVisible();
   const box = await requireBox(cell);
   expect(box.height).toBeGreaterThanOrEqual(44);
   expect(box.width).toBeGreaterThanOrEqual(44);
-  await expect(page.locator('.status-strip .orientation-notice')).toContainText('North up');
+  await expect(page.locator('.status-strip .status-cell')).toContainText('North up');
   // A long fallback label must still not push the strip sideways.
   await expectNoHorizontalOverflow(page.locator('body'));
 });
@@ -549,7 +552,8 @@ test('keeps long battery readings distinguishable in a night-red tablet dock', a
   }
   await dock.getByRole('button', { name: 'Done' }).click();
   for (const label of labels) {
-    await expect(dock.getByRole('button', { name: new RegExp(`^${label},`) })).toBeVisible();
+    // A tile is named by what it shows, the reading and then its full label.
+    await expect(dock.getByRole('button', { name: label })).toBeVisible();
   }
   await expectNoHorizontalOverflow(page.locator('body'));
   await expectNoHorizontalOverflow(dock);
@@ -625,7 +629,7 @@ test('keeps major overlay states accessibility-clean', async ({ page, browserNam
   await trends.getByRole('button', { name: 'Close trends, return to chart' }).click();
 
   await page
-    .locator('header')
+    .locator('.status-strip')
     .getByRole('button', { name: 'MOB: mark man overboard here' })
     .click();
   const mobDialog = page.getByRole('alertdialog', { name: 'Man overboard' });
@@ -668,7 +672,7 @@ test('paints the day chart in the paper chart palette', async ({ page }) => {
   expect(await colorShare(page, await canvas.screenshot(), [0xf8, 0xf4, 0xf0])).toBeLessThan(0.01);
 });
 
-test('keeps a slim top bar with MOB centered and the brand for assistive tech only', async ({
+test('has no top bar: the chart starts at the top and the brand is for assistive tech only', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
@@ -680,15 +684,8 @@ test('keeps a slim top bar with MOB centered and the brand for assistive tech on
   await expect(heading).toHaveCount(1);
   await expect(heading).toHaveAccessibleName('Binnacle Chartplotter');
   expect((await heading.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1);
-
-  const bar = await page.locator('header.topbar').boundingBox();
-  const mob = await page
-    .getByRole('button', { name: 'MOB: mark man overboard here' })
-    .boundingBox();
-  if (!bar || !mob) throw new Error('top bar or MOB not laid out');
-  // 44px controls, 4px above and below, and the 1px bottom border.
-  expect(Math.round(bar.height)).toBe(Math.round(mob.height) + 9);
-  expect(Math.abs(mob.x + mob.width / 2 - 512)).toBeLessThanOrEqual(1);
+  await expect(page.locator('header')).toHaveCount(0);
+  expect((await requireBox(page.locator('.chart-host'))).y).toBe(0);
 });
 
 for (const width of [320, 360]) {
@@ -711,51 +708,153 @@ for (const width of [320, 360]) {
   });
 }
 
-test('a crowded top bar gives way whole chips and never covers MOB', async ({ page }) => {
+// The bar's two ends hold at every size: the full height of the bar, at its two edges, and every
+// readout whole inside its column.
+for (const [width, height] of [
+  [1400, 700],
+  [1920, 1080],
+  [1600, 900],
+  [844, 390],
+  [390, 760],
+  [360, 640],
+  [568, 320],
+] as const) {
+  test(`the bar's ends and readouts hold at ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
+    await stubVesselsSelf(page);
+    await page.goto('/');
+    const menu = page.getByRole('button', { name: 'Menu', exact: true });
+    const mob = page.getByRole('button', { name: 'MOB: mark man overboard here' });
+    await expect(mob).toBeVisible({ timeout: 20_000 });
+    await expect(menu).toBeVisible();
+    await expect(page.locator('.status-strip .status-cell')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const grid = document.querySelector('.strip-grid')?.getBoundingClientRect();
+          const ends = [...document.querySelectorAll('.bar-bookend')].map((end) =>
+            end.getBoundingClientRect(),
+          );
+          if (!grid || ends.length !== 2) return ['bar not laid out'];
+          const faults: string[] = [];
+          for (const end of ends)
+            if (Math.abs(end.height - grid.height) > 1) faults.push('an end is not full height');
+          if (Math.abs((ends[0]?.left ?? 0) - grid.left) > 1) faults.push('menu is off the edge');
+          if (Math.abs((ends[1]?.right ?? 0) - grid.right) > 1) faults.push('MOB is off the edge');
+          for (const part of document.querySelectorAll<HTMLElement>(
+            '.strip-readouts .data-cell-value, .strip-readouts .word',
+          ))
+            if (part.scrollWidth > part.clientWidth + 0.5)
+              faults.push(`${part.textContent?.trim()} is cut`);
+          return faults;
+        }),
+      )
+      .toEqual([]);
+    await expectNoHorizontalOverflow(page.locator('body'));
+  });
+}
+
+test('the Status cell keeps its box when problems come and go', async ({ page, context }) => {
+  await page.setViewportSize({ width: 1400, height: 700 });
+  await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
+  await stubVesselsSelf(page);
+  await page.goto('/');
+  const cell = page.locator('.status-strip .status-cell');
+  await expect(cell).toBeVisible({ timeout: 20_000 });
+  const before = await requireBox(cell);
+  await context.setOffline(true);
+  await expect(cell).toContainText('Offline');
+  const during = await requireBox(cell);
+  for (const key of ['x', 'y', 'width', 'height'] as const)
+    expect(Math.abs(during[key] - before[key])).toBeLessThanOrEqual(0.5);
+  await cell.click();
+  const list = page.getByRole('dialog', { name: 'Status' });
+  await expect(list).toBeVisible();
+  await expect(list).toContainText('This device has no network connection');
+  await page.keyboard.press('Escape');
+  await expect(list).toBeHidden();
+  await expect(cell).toBeFocused();
+  await context.setOffline(false);
+});
+
+for (const [width, height] of [
+  [390, 760],
+  [1400, 700],
+] as const) {
+  test(`MOB is one tap away with the menu open at ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
+    await stubVesselsSelf(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await expect(page.locator('#app-menu-launcher')).toBeVisible();
+    const mob = page.getByRole('button', { name: 'MOB: mark man overboard here' });
+    // Nothing the menu opened sits over MOB.
+    expect(
+      await mob.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return element.contains(top);
+      }),
+    ).toBe(true);
+    await mob.click();
+    await expect(page.getByRole('alertdialog', { name: 'Man overboard' })).toBeVisible();
+    await expect(page.locator('#app-menu-launcher')).toBeHidden();
+  });
+}
+
+test('MOB is the second focus stop, right after the menu', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 700 });
+  await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
+  await stubVesselsSelf(page);
+  await page.goto('/');
+  const menu = page.getByRole('button', { name: 'Menu', exact: true });
+  await expect(menu).toBeVisible({ timeout: 20_000 });
+  await menu.focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'MOB: mark man overboard here' })).toBeFocused();
+});
+
+test('opening the instrument dock leaves MOB where it was', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 700 });
   await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
   await stubVesselsSelf(page);
   await page.goto('/');
   const mob = page.getByRole('button', { name: 'MOB: mark man overboard here' });
   await expect(mob).toBeVisible({ timeout: 20_000 });
-  // A collision mute and a waiting update, the two chips the fixture cannot raise on its own, beside
-  // the theme chip, with the same ranks the app gives them.
-  await page.evaluate(() => {
-    const actions = document.querySelector('.topbar-actions');
-    const real = document.querySelector('.topbar-action');
-    if (!actions || !real) throw new Error('no top bar actions');
-    // The real wrapper's classes carry the component's style scope, which the chip rules need.
-    const scope = [...real.classList].filter((name) => !name.startsWith('topbar-action'));
-    const chip = (rank: string, html: string) => {
-      const span = document.createElement('span');
-      span.classList.add('topbar-action', ...scope);
-      if (rank) span.dataset.yield = rank;
-      span.innerHTML = html;
-      actions.prepend(span);
-    };
-    chip('1', '<button type="button" class="btn btn-primary btn-pill">Update</button>');
-    chip('', '<button type="button" class="btn btn-warning btn-pill">Muted 15min</button>');
+  const before = await requireBox(mob);
+  await openMenuItem(page, 'Instrument dock');
+  await expect(page.locator('.instruments')).toBeVisible();
+  const after = await requireBox(mob);
+  for (const key of ['x', 'y', 'width', 'height'] as const)
+    expect(Math.abs(after[key] - before[key])).toBeLessThanOrEqual(0.5);
+});
+
+test('bar tiles and ends center their icon and label', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 700 });
+  await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
+  await stubVesselsSelf(page);
+  await page.goto('/');
+  await expect(page.locator('.bar-tile').first()).toBeVisible({ timeout: 20_000 });
+  await page.evaluate(() => document.fonts.ready);
+  const faults = await page.evaluate(() => {
+    const out: string[] = [];
+    for (const control of document.querySelectorAll<HTMLElement>('.bar-tile, .bar-bookend')) {
+      const icon = control.querySelector('svg')?.getBoundingClientRect();
+      const text = control.querySelector('.tile-label .truncate, .bar-bookend-label')?.firstChild;
+      if (!icon || !text) continue;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const label = range.getBoundingClientRect();
+      // The pair as a block, centered in the control's own content.
+      const box = control.getBoundingClientRect();
+      const above = icon.top - box.top;
+      const below = box.bottom - label.bottom;
+      if (Math.abs(above - below) > 1.5)
+        out.push(`${control.textContent?.trim()}: ${above} vs ${below}`);
+    }
+    return out;
   });
-  for (const width of [601, 700, 820]) {
-    await page.setViewportSize({ width, height: 700 });
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const mobBox = document.querySelector('.mob-btn')?.getBoundingClientRect();
-          const flank = document.querySelector('.topbar-actions')?.getBoundingClientRect();
-          if (!mobBox || !flank) return ['top bar not laid out'];
-          const faults: string[] = [];
-          for (const el of document.querySelectorAll<HTMLElement>('.topbar-action > *')) {
-            if (el.getClientRects().length === 0) continue;
-            const box = el.getBoundingClientRect();
-            const name = el.textContent?.trim() || el.className;
-            if (box.left < mobBox.right) faults.push(`${name} covers MOB`);
-            if (box.left < flank.left - 0.5) faults.push(`${name} spills out of its flank`);
-            if (el.scrollWidth > el.clientWidth + 1) faults.push(`${name} is squeezed`);
-          }
-          return faults;
-        }),
-      )
-      .toEqual([]);
-  }
-  await expect(page.getByRole('button', { name: 'Muted 15min' })).toBeVisible();
+  expect(faults).toEqual([]);
 });

@@ -339,17 +339,17 @@ for (const width of [320, 360]) {
     page,
   }) => {
     // ACCESS-01: exercise the initiating control itself before raising the fixture alarm. The
-    // earlier check began with an active MOB and could not catch a profile control overlapping the
-    // topbar trigger at large text.
+    // earlier check began with an active MOB and could not catch another control overlapping the
+    // MOB key at large text.
     await page.setViewportSize({ width, height: 800 });
     await setRootFontSize(page, 200);
     await openApp(page);
 
     const trigger = page
-      .locator('header')
+      .locator('.status-strip')
       .getByRole('button', { name: 'MOB: mark man overboard here' });
     await expectActionReachable(trigger);
-    for (const control of await page.locator('header button:visible').all()) {
+    for (const control of await page.locator('.status-strip button:visible').all()) {
       await expectActionReachable(control);
     }
     await expectNoHorizontalOverflow(page.locator('body'));
@@ -501,7 +501,8 @@ test('stale wind angle is not presented as live beside fresh speed', async ({ pa
     await page.waitForTimeout(2_000);
     await sendDelta(page, [{ path: 'environment.wind.speedApparent', value: 6 + tick * 0.1 }]);
   }
-  await expect(tile).toHaveAttribute('aria-label', /angle (stale|unavailable)/i);
+  // The tile is named by what it shows, so the badge's words carry the angle's state.
+  await expect(tile).toHaveAccessibleName(/angle (stale|unavailable)/i);
 });
 
 test('route editing stays visible with its exit actions when its panel is replaced', async ({
@@ -608,16 +609,31 @@ test('orientation falls back to north on a stale reference and survives a manual
   await page.getByRole('button', { name: /Orientation Course up/ }).click();
 
   const chip = page.locator('.status-strip .orientation-readout');
-  const notice = page.locator('.status-strip .orientation-notice');
+  const status = page.locator('.status-strip .status-cell');
+  const list = page.getByRole('dialog', { name: 'Status' });
+  // The fallback's reason lives in the Status list, one row among whatever else is reported. Each
+  // open and close waits for the list to settle, so a check never reads a list that is leaving.
+  const openList = async (): Promise<Locator> => {
+    await expect(list).toBeHidden();
+    await status.click();
+    await expect(list).toBeVisible();
+    return list.locator('.status-row').filter({ hasText: 'North up (true heading stale)' });
+  };
+  const closeList = async (): Promise<void> => {
+    await page.keyboard.press('Escape');
+    await expect(list).toBeHidden();
+  };
   await sendDelta(page, OWN_FIX);
   await expect(chip).toContainText('Heading up');
   await expect(chip).toContainText('True');
-  await expect(notice).toHaveCount(0);
+  await expect(await openList()).toHaveCount(0);
+  await closeList();
 
   // The reference stops arriving: the vessel staleness window elapses and the chart states its
   // immediate fallback to north rather than holding a dead rotation.
   await expect(chip).toContainText('North up', { timeout: 20_000 });
-  await expect(notice).toContainText('North up (true heading stale)');
+  await expect(await openList()).toHaveCount(1);
+  await closeList();
 
   // A manual pan releases Follow elsewhere but must not corrupt the orientation state.
   const canvas = page.locator('.maplibregl-canvas');
@@ -627,16 +643,19 @@ test('orientation falls back to north on a stale reference and survives a manual
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2 + 40, { steps: 5 });
   await page.mouse.up();
-  await expect(notice).toContainText('North up (true heading stale)');
+  await expect(await openList()).toHaveCount(1);
+  await closeList();
 
-  // A tap on the fallen-back cell explains and keeps the chosen rotation; the caution line's Use north
-  // up returns to north up for good, and the cell retires with the mode.
+  // A tap on the fallen-back cell explains and keeps the chosen rotation; the Status list's Use
+  // north up returns to north up for good, and the cell retires with the mode.
   await chip.click();
-  await expect(page.getByText('The chosen rotation resumes when its data returns.')).toBeVisible();
+  await expect(page.locator('.chip-note')).toContainText(
+    'The chosen rotation resumes when its data returns.',
+  );
   await expect(chip).toBeVisible();
-  await notice.getByRole('button', { name: 'Use north up' }).click();
+  await (await openList()).getByRole('button', { name: 'Use north up' }).click();
   await expect(chip).toHaveCount(0);
-  await expect(notice).toHaveCount(0);
+  await expect(status).not.toContainText('North up');
 });
 
 test('watch handoff keeps an offline snapshot on the device and says so', async ({ page }) => {
@@ -745,10 +764,15 @@ test('a caution-grade alert shows on the strip and opens Alarms', async ({ page 
       value: { state: 'warn', method: ['visual'], message: 'House battery low' },
     },
   ]);
-  const chip = page.getByRole('button', { name: '1 alert, open Alarms' });
-  await expect(chip).toBeVisible();
-  await expectHelmHitTarget(chip);
-  await chip.click();
+  const status = page.locator('.status-strip .status-cell');
+  await expect(status).toHaveAttribute('aria-haspopup', 'dialog');
+  await expectHelmHitTarget(status);
+  await status.click();
+  const row = page
+    .getByRole('dialog', { name: 'Status' })
+    .locator('.status-row')
+    .filter({ hasText: '1 alert' });
+  await row.getByRole('button', { name: 'Open Alarms' }).click();
   await expect(page.getByRole('heading', { name: 'Alarms', exact: true })).toBeVisible();
 });
 
@@ -774,8 +798,11 @@ test('acknowledging shallow water keeps keyboard focus in the safety rail when a
 test.describe('a phone held sideways', () => {
   test.use({ hasTouch: true, isMobile: true });
 
+  // The menu is the bar's leading end: slim beside a sideways phone's one row.
   const menuPill = (page: Page): Locator =>
-    page.locator('.pinned-actions').getByRole('button', { name: 'Menu', exact: true });
+    page
+      .locator('.status-strip .bookend--start')
+      .getByRole('button', { name: 'Menu', exact: true });
 
   async function openPhone(
     page: Page,
@@ -785,15 +812,6 @@ test.describe('a phone held sideways', () => {
     if (textPercent !== undefined) await setRootFontSize(page, textPercent);
     await openApp(page);
     if (fix) await sendDelta(page, OWN_FIX);
-    // A fresh load cannot sound an alarm until the first tap, which the caution line states above
-    // the readouts. Enable is that tap, so the calm strip is one row again.
-    const enable = page.locator('.status-strip .sound-off-notice').getByRole('button', {
-      name: 'Enable',
-    });
-    if (await enable.isVisible()) {
-      await enable.click();
-      await expect(enable).toHaveCount(0);
-    }
   }
 
   async function stripBoxes(page: Page) {
@@ -830,7 +848,8 @@ test.describe('a phone held sideways', () => {
         expect(chart.height / height).toBeGreaterThanOrEqual(0.7);
         await expectPillsBesideReadouts(page);
       }).toPass({ timeout: 10_000 });
-      for (const name of ['Menu', 'Center', 'Follow'])
+      await expectHelmHitTarget(menuPill(page));
+      for (const name of ['Center', 'Follow'])
         await expectHelmHitTarget(
           page.locator('.pinned-actions').getByRole('button', { name, exact: true }),
         );
@@ -873,7 +892,9 @@ test.describe('a phone held sideways', () => {
     await openPhone(page, { width: 568, height: 320, textPercent: 200 });
     const { readouts, bar } = await stripBoxes(page);
     expect(bar.y).toBeGreaterThanOrEqual(readouts.y + readouts.height - 1);
-    expect(readouts.width).toBeGreaterThan(568 * 0.8);
+    // Everything between the two slim ends.
+    const grid = await requireBox(page.locator('.status-strip .strip-grid'));
+    expect(readouts.width).toBeGreaterThanOrEqual(grid.width - 2 * 48 - 1);
     await expectHelmHitTarget(menuPill(page));
     await expectNoHorizontalOverflow(page.locator('body'));
   });

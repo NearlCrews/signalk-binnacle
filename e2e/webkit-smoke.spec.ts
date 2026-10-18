@@ -11,8 +11,8 @@ test('WebKit supports the app shell and a primary panel interaction', async ({ p
   await page.goto('/');
 
   await expect(page.locator('.brand')).toContainText('Binnacle Chartplotter');
-  await expect(page.locator('.status-strip .conn')).toHaveAttribute(
-    'title',
+  // The Status cell's always-mounted connection region names the stream phase.
+  await expect(page.locator('.status-strip .conn-live')).toHaveText(
     /Connecting|Connected|Reconnecting|Not connected/,
   );
 
