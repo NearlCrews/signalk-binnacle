@@ -877,12 +877,26 @@ test.describe('a phone held sideways', () => {
     }).toPass({ timeout: 10_000 });
   });
 
-  test('large text sideways wraps readouts beside the pills without overflowing', async ({
+  test('large text sideways keeps whichever arrangement leaves the bar shorter', async ({
     page,
   }) => {
+    // At 150 percent the readouts hold one row when stacked, which beats two rows beside the tiles.
     await openPhone(page, { width: 852, height: 393, textPercent: 150 });
+    await expect(async () => {
+      const { readouts, bar } = await stripBoxes(page);
+      expect(bar.y).toBeGreaterThanOrEqual(readouts.y + readouts.height - 1);
+    }).toPass({ timeout: 10_000 });
     await expectHelmHitTarget(menuPill(page));
-    await expectPillsBesideReadouts(page);
+    await expectNoHorizontalOverflow(page.locator('body'));
+    // At 200 percent they take two rows either way, so beside the tiles they save the tiles' row.
+    await setRootFontSize(page, 200);
+    await page.reload();
+    await waitForSignalKConnection(page);
+    await sendDelta(page, OWN_FIX);
+    await expect(async () => {
+      await expectPillsBesideReadouts(page);
+    }).toPass({ timeout: 10_000 });
+    await expectHelmHitTarget(menuPill(page));
     await expectNoHorizontalOverflow(page.locator('body'));
   });
 

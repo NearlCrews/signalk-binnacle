@@ -98,11 +98,15 @@ condition, and one used there drops the whole block.
   `createMediaQuery` shares one list and one change listener per query across every caller.
 - A phone held sideways is the one height-keyed layout: `LANDSCAPE_SHORT_QUERY`,
   `(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)`. Under it the status
-  bar keeps one row while three readout columns fit beside the pinned tiles (34rem of bar, measured
-  in rem, so at very large text the tiles drop back onto their own row and the readouts keep the full
-  width): slim menu and MOB ends at the two edges, the readouts on their own equal-column grid
-  (wrapping whole cells onto a second line of the same columns rather than running under the tiles),
-  and the pinned tiles icon-only beside them with their accessible names and 44px targets. The
+  bar sets the pinned tiles beside the readouts whenever that leaves the bar no taller than giving
+  them a row of their own (`tilesBeside`, measured in pixels from the bar's real cells and tiles and
+  counted against the full compact set, so the arrangement holds as COG comes and goes). At the
+  default text size that is one row; at very large text the readouts wrap either way, so beside the
+  tiles they save the tiles' row, and where beside them the readouts would take more rows than that
+  saves, the tiles drop back onto their own row and the readouts keep the full width. Sideways: slim
+  menu and MOB ends at the two edges, the readouts on their own equal-column grid (wrapping whole
+  cells onto a second line of the same columns rather than running under the tiles), and the pinned
+  tiles icon-only beside them with their accessible names and 44px targets. The
   position and time cells hide, including the last-fix coordinates and age, as they already do under
   900px, and the Status cell keeps reporting a lost fix. Tile capacity there is the responsive
   maximum, because the bar is sized to its own tiles, and a blocked tile's note anchors to the bar's
@@ -353,8 +357,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   composed by the status strip, the autopilot cell, and every strip's metrics row. A host sets the
   value size for its role through `--data-value-size` (and `--data-value-line` for a larger size):
   the status bar uses `--text-data`, the strips `--text-readout`, and the collision strip's CPA and
-  TCPA `--text-readout-lg`. A `.data-cell` is one bar column, the control size tall, holding two fixed
-  lines at the shared `--data-label-line` and `--data-value-line` heights: a `.data-cell-label`
+  TCPA `--text-readout-lg`. A `.data-cell` is one bar column, the control size or its two lines tall,
+  whichever is taller (a `min-block-size`, never a fixed height: a short screen pins the control size
+  at 44 px while enlarged text keeps growing the lines, and a fixed height drew one row's values over
+  the next), holding two fixed lines at the shared `--data-label-line` and `--data-value-line`
+  heights: a `.data-cell-label`
   (bare caps words, no colon: SOG, COG, HDG, Depth, Vessel, Time, Chart · COG, AP · Auto) over a
   `.data-cell-value` (the value in `.num` at `--text-data`, then the unit, datum, or hemisphere as
   plain text at the label size; a word value in `.word` at `--text-lg`). Time uses local time, and a
@@ -377,7 +384,7 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   height into `--bar-block-size` on the document root (zero while the phone instrument dock covers
   the whole screen), which every fixed surface uses to stay above the bar: the menu sheet, the
   Forecast panel and the strips lifted over it, the sunset offer, and every menu's backdrop.
-  Four layouts:
+  Four layouts, and a large-text variant of the stacked one:
   - Stacked by default: the ends take the first and last column the full height of the bar, the
     readouts flow through the columns between them as a subgrid (so every cell edge is a bar column
     edge) at least `--data-cell-min` wide (5.75rem at 900 px and below), and the pinned tiles sit on
@@ -395,15 +402,16 @@ Reach for these before writing scoped CSS. Each lives in the named module.
     first spare, the anchor watch the second, and the autopilot the second unless the anchor holds
     it, when it takes the time column and Time steps aside.
   - The sideways phone row (section 2).
-  - Very large text on a narrow phone, where not even two columns fit between the slim ends
-    (`max-width: calc(11.5rem + 96px)`, so it never applies at the default size): the cells set their
-    label beside the value at the physical 44 px floor and wrap as whole items, so the bar never
-    stacks one readout per row and pushes a safety strip off the screen.
+  - Very large text on a phone, where only one readout column fits between the slim ends (never at
+    the default size): one readout per row, each the standard two-line cell over the physical 44 px
+    floor rather than the enlarged control size, with no dividers. The context cell gives way there
+    (below), so the bar holds three rows, not four. A label set beside its value cannot hold a
+    Status word or a depth in that width, which is why the cells keep their two lines.
 
   What gives way is decided by a measured budget (`readoutBudget`): the time first, then the
-  two-column position, then the compact set (the AIS cell leaves, and COG or HDG shows by context).
-  SOG, Depth, and the Status cell never give way; when even the compact set is too wide, whole cells
-  wrap onto a second row on the same columns.
+  two-column position, then the compact set (the AIS cell leaves, and COG or HDG shows by context),
+  then, on a bar of one readout column, that context cell. SOG, Depth, and the Status cell never give
+  way; when even they are too wide, whole cells wrap onto further rows on the same columns.
 
   A problem that belongs to one readout shows inside its cell (dashed SOG and COG in the caution
   voice, Depth Paused, Chart north up). Every other problem goes in the Status cell (`StatusCell`, fed

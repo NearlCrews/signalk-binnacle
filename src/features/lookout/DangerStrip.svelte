@@ -182,10 +182,6 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   grid-template-columns: minmax(0, 1fr) repeat(2, 6.5rem);
   align-items: center;
 }
-.list .data-cell {
-  block-size: auto;
-  min-block-size: var(--control-size);
-}
 @media (max-width: 600px) {
   /* The contact name owns its own line at phone width instead of truncating beside two metrics,
      and the provenance note yields its space: which device computed CPA is the least

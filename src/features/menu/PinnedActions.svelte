@@ -236,7 +236,9 @@ $effect(() => {
 /* The bar's actions are equal tiles, an icon over a one-line label, centered as a pair. Tiles share
    the bar equally, up to one bar column each. A host that sets the tiles on one row with readouts
    (the status strip's helm row) opts into the readouts' two line heights and value baseline through
-   the --bar-tile-* variables, and grants --bar-capacity with the column, gap, and inset. */
+   the --bar-tile-* variables, and grants --bar-capacity with the column, gap, and inset. A host
+   short of height may set --bar-tile-size to hold an icon tile at the physical target floor, since
+   its icon does not grow with the text. */
 .pinned-actions {
   position: relative;
   /* Fill the host's column whatever the host's own alignment, so capacity is measured against the
@@ -278,8 +280,9 @@ $effect(() => {
 }
 .bar-tile.icon-only {
   display: flex;
-  inline-size: var(--control-size);
-  min-inline-size: var(--control-size);
+  inline-size: var(--bar-tile-size, var(--control-size));
+  min-inline-size: var(--bar-tile-size, var(--control-size));
+  min-block-size: var(--bar-tile-size, var(--control-size));
   padding: 0;
 }
 .pinned-actions.icon-only-bar {

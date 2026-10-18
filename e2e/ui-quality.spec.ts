@@ -708,19 +708,30 @@ for (const width of [320, 360]) {
   });
 }
 
-// The bar's two ends hold at every size: the full height of the bar, at its two edges, and every
-// readout whole inside its column.
-for (const [width, height] of [
-  [1400, 700],
-  [1920, 1080],
-  [1600, 900],
-  [844, 390],
-  [390, 760],
-  [360, 640],
-  [568, 320],
+// The bar's two ends hold at every size and text size: the full height of the bar, at its two
+// edges, and every readout whole inside its own box. A short screen pins the control height at 44 px
+// while enlarged text keeps growing a cell's two lines, which once drew one row's values over the
+// next.
+for (const [width, height, text] of [
+  [1400, 700, 100],
+  [1920, 1080, 100],
+  [1600, 900, 100],
+  [844, 390, 100],
+  [390, 760, 100],
+  [360, 640, 100],
+  [568, 320, 100],
+  [568, 320, 200],
+  [852, 393, 150],
+  [852, 393, 200],
+  [1024, 500, 200],
+  [390, 844, 200],
+  [320, 568, 200],
 ] as const) {
-  test(`the bar's ends and readouts hold at ${width}x${height}`, async ({ page }) => {
+  test(`the bar's ends and readouts hold at ${width}x${height} and ${text}-percent text`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width, height });
+    if (text !== 100) await setRootFontSize(page, text);
     await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
     await stubVesselsSelf(page);
     await page.goto('/');
@@ -747,6 +758,22 @@ for (const [width, height] of [
           ))
             if (part.scrollWidth > part.clientWidth + 0.5)
               faults.push(`${part.textContent?.trim()} is cut`);
+          const cells = [
+            ...document.querySelectorAll<HTMLElement>('.strip-readouts .data-cell'),
+          ].filter((cell) => cell.offsetParent !== null);
+          for (const cell of cells)
+            if (cell.scrollHeight > cell.clientHeight + 0.5)
+              faults.push(`${cell.textContent?.trim()} spills out of its cell`);
+          const boxes = cells.map((cell) => cell.getBoundingClientRect());
+          for (const [i, a] of boxes.entries())
+            for (const b of boxes.slice(i + 1))
+              if (
+                a.left < b.right - 0.5 &&
+                b.left < a.right - 0.5 &&
+                a.top < b.bottom - 0.5 &&
+                b.top < a.bottom - 0.5
+              )
+                faults.push('two readouts overlap');
           return faults;
         }),
       )

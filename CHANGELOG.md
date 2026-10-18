@@ -49,6 +49,15 @@ All notable changes to Binnacle are documented here. The format follows
   abbreviation (SOG, AWS) to open it.
 - Give the MOB confirm's Mark man overboard button the MOB key's solid fill, so its text meets AA
   contrast in the dusk theme.
+- Grow the readouts with enlarged text on a short screen, where they kept a 44 px height and drew
+  one row's values over the next: the status bar's cells and every strip's metrics are now as tall
+  as their two lines need.
+- Keep every readout whole at very large text on a phone, where a label set beside its value cut
+  the Status word and the depth short: the cells keep their label over the value, one per row, and
+  COG or HDG gives way so the bar holds Status, SOG, and Depth.
+- On a phone held sideways at very large text, set the bar's tiles beside readouts that take two
+  rows either way, saving the tiles' row of chart, and keep them on their own row wherever that
+  leaves the bar shorter.
 
 <a id="v0240"></a>
 

@@ -268,11 +268,10 @@ describe('design contract: layout breakpoints', () => {
   it('keeps the status strip on one row on a phone held sideways', () => {
     const landscape = strip.indexOf(`@media ${LANDSCAPE} {`);
     expect(landscape).toBeGreaterThan(strip.indexOf('@media (max-width: 900px) {'));
-    // One row only while three readout columns fit beside the tiles, in rem, so very large text
-    // drops the tiles back onto their own row instead of squeezing the readouts into one column.
-    expect(strip).toContain(
-      'const sideways = $derived(landscapeShort.matches && barRem >= SIDEWAYS_ROW_REM);',
-    );
+    // The tiles sit beside the readouts only when that leaves the bar no taller, measured, so very
+    // large text drops them back onto their own row instead of squeezing the readouts into one
+    // column, and readouts that wrap either way save the tiles' row.
+    expect(strip).toContain('tilesBeside(sidewaysRoom, tileSpan, COMPACT_READOUTS + extras)');
     expect(strip).toMatch(
       /\.strip-grid\.sideways \{\s*grid-template-columns:\s*calc\(var\(--target-floor\) \+ var\(--space-1\)\)\s*minmax\(0, 1fr\)\s*auto/,
     );

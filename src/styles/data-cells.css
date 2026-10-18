@@ -3,13 +3,15 @@
    whole row, whatever each cell holds. Composed by the status strip, the autopilot readout, and the
    bottom strips' metrics; the bar's pinned tiles reuse the same two line heights. A host sets the
    value size for its role with --data-value-size (the bottom strips use --text-readout), and the
-   value line with --data-value-line when a larger size needs it. */
+   value line with --data-value-line when a larger size needs it. The cell is the control height
+   or its two lines, whichever is taller: a short screen pins the control height at 44 px while
+   enlarged text keeps growing the lines, and a fixed height drew one row's values over the next. */
 .data-cell {
   display: grid;
   grid-template-rows: var(--data-label-line) var(--data-value-line);
   align-content: center;
   min-inline-size: 0;
-  block-size: var(--control-size);
+  min-block-size: var(--control-size);
   padding: 0 0.35rem;
   border: 0;
   background: none;

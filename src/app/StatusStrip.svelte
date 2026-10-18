@@ -34,6 +34,7 @@ import { type ConnectionPhase, isConnectionDown } from '$shared/signalk';
 import { observeClientHeight, TransientNote } from '$shared/ui';
 import { readoutBudget } from './readout-budget';
 import StatusCell from './StatusCell.svelte';
+import { type SidewaysRoom, tilesBeside } from './sideways-row';
 import { buildStatusNotices } from './status-notices';
 
 let {
@@ -208,23 +209,22 @@ const aisTitle = $derived.by(() => {
   return `AIS targets being watched for collision risk; ${cause}${nearest}`;
 });
 
-// The bar's layout, measured: whether the ends go slim (icons only), whether the bar is a sideways
-// phone's single row, and how many columns the readouts have, which decides what gives way.
+// The bar's layout, measured: whether the ends go slim (icons only), whether a sideways phone sets
+// its tiles beside the readouts, and how many columns the readouts have, which decides what gives
+// way.
 const landscapeShort = createMediaQuery(LANDSCAPE_SHORT_QUERY);
 // The ends go slim while the bar holds fewer than two end columns and four readout columns, counted
 // in the bar's own column module, so it follows the text size. A phone held sideways always goes
 // slim, since its height is the scarce axis.
 const SLIM_BAR_COLUMNS = 6;
-// A sideways phone keeps one row while three readout columns fit beside the tiles.
-const SIDEWAYS_ROW_REM = 34;
 let footer = $state<HTMLElement>();
 let grid = $state<HTMLElement>();
 let readouts = $state<HTMLElement>();
 let barRem = $state(Number.POSITIVE_INFINITY);
 let cellRem = $state(0);
 let readoutColumns = $state(Number.POSITIVE_INFINITY);
+let sidewaysRoom = $state<SidewaysRoom>();
 const slim = $derived(landscapeShort.matches || barRem < SLIM_BAR_COLUMNS * cellRem);
-const sideways = $derived(landscapeShort.matches && barRem >= SIDEWAYS_ROW_REM);
 
 function measure(): void {
   if (!footer || !grid || !readouts) return;
@@ -237,6 +237,26 @@ function measure(): void {
     Number.parseFloat(style.paddingInlineEnd);
   barRem = content / root;
   cellRem = Number.parseFloat(style.getPropertyValue('--strip-cell-min')) || 0;
+  // The same in either sideways arrangement: slim ends, readout cells, and icon tiles.
+  const cell = readouts.querySelector<HTMLElement>('.data-cell');
+  const tile = grid.querySelector<HTMLElement>('.bar-tile');
+  const ends = [...grid.querySelectorAll<HTMLElement>(':scope > .bookend')].reduce(
+    (sum, end) => sum + end.offsetWidth,
+    0,
+  );
+  const tileGap = style.getPropertyValue('--space-2').trim();
+  sidewaysRoom =
+    cell && tile
+      ? {
+          middle: content - ends,
+          cellWidth: cellRem * root,
+          cellHeight: cell.offsetHeight,
+          tileWidth: tile.offsetWidth,
+          tileGap: Number.parseFloat(tileGap) * (tileGap.endsWith('rem') ? root : 1) || 0,
+          tileHeight: tile.offsetHeight,
+          gap: Number.parseFloat(getComputedStyle(grid).rowGap) || 0,
+        }
+      : undefined;
   // The helm row places every readout in a reserved column, so nothing gives way there.
   if (getComputedStyle(readouts).display === 'contents') {
     readoutColumns = Number.POSITIVE_INFINITY;
@@ -285,13 +305,15 @@ const budget = $derived(readoutBudget(readoutColumns, extras));
 // A narrow bar carries a bounded, context-prioritized readout set instead of hiding COG, heading,
 // and AIS with fixed CSS: underway or navigating, COG is the course reference, and a boat with only
 // a compass shows HDG. Unassessed AIS targets are always the Status cell's to report, so a compact
-// bar dropping the AIS cell never hides them. Wide layouts show everything.
+// bar dropping the AIS cell never hides them. A bar of one readout column has no room for the
+// context cell at all. Wide layouts show everything.
 const compactQuery = createMediaQuery(NARROW_QUERY);
 const compact = $derived(compactQuery.matches || budget.compact);
 const underway = $derived(!vessel.sogStale && (vessel.sogMps ?? 0) >= COG_MIN_SOG_MPS);
-const showCog = $derived(!compact || navigating || underway);
+const showCog = $derived(!compact || (budget.context && (navigating || underway)));
 const showHdg = $derived(
-  !compact || (!showCog && !vessel.headingStale && vessel.headingRad !== undefined),
+  !compact ||
+    (budget.context && !showCog && !vessel.headingStale && vessel.headingRad !== undefined),
 );
 const lookoutOpen = $derived(connectionPhase === 'open');
 const showLookout = $derived(lookoutOpen && !compact);
@@ -302,6 +324,15 @@ const showLookout = $derived(lookoutOpen && !compact);
 // draws: every pin up to the bar's cap (the cap counts the More tile when there are more).
 const tileSpan = $derived(
   Math.min(pinnedActions.length, compactQuery.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS),
+);
+// A phone held sideways sets the tiles beside the readouts whenever that leaves the bar no taller,
+// counting the compact set (Status, SOG, the context cell, and Depth) and the optional readouts, so
+// the arrangement holds as COG comes and goes.
+const COMPACT_READOUTS = 4;
+const sideways = $derived(
+  landscapeShort.matches &&
+    sidewaysRoom !== undefined &&
+    tilesBeside(sidewaysRoom, tileSpan, COMPACT_READOUTS + extras),
 );
 const tilesOnColumns = $derived(
   !sideways && Number.isFinite(readoutColumns) && tileSpan > 0 && readoutColumns >= tileSpan,
@@ -432,6 +463,7 @@ const notices = $derived(
     class:slim
     class:sideways
     class:tiles-on-columns={tilesOnColumns}
+    class:one-column={readoutColumns === 1}
     style:--tile-start={tilesOnColumns ? tileStart : undefined}
     style:--tile-span={tilesOnColumns ? tileSpan : undefined}
     bind:this={grid}
@@ -625,11 +657,12 @@ const notices = $derived(
      columns between them (a subgrid, so every cell edge is a bar column edge), and the tiles sit on
      whole columns centered beneath.
    - Slim, a narrow bar: the ends shrink to one icon target each and the readouts share the rest.
-   - Sideways phone: the readouts beside icon tiles on one row, between slim ends.
+   - Sideways phone: the readouts beside icon tiles, between slim ends, whenever that leaves the bar
+     no taller.
    - Helm row, once the bar holds seventeen columns: everything on one row, in reserved columns.
    Focus follows the source order (menu, MOB, readouts, tiles) everywhere. */
 .status-strip {
-  /* The query container for the helm row and the large-text layout below. */
+  /* The query container for the helm row below. */
   container: status-strip / inline-size;
   /* The stacked grid's column floor: two hold the vessel position. */
   --strip-cell-min: var(--data-cell-min);
@@ -695,9 +728,10 @@ const notices = $derived(
     repeat(auto-fill, minmax(var(--strip-cell-min), 1fr))
     calc(var(--target-floor) + var(--space-1));
 }
-/* A phone held sideways has the width for one row but not the height for two: the readouts take the
-   middle on their own equal-column grid (wrapping whole cells onto a second line of the same columns
-   rather than running under the tiles), with the icon tiles beside them, all between slim ends. */
+/* A phone held sideways is short of height, so whenever it leaves the bar no taller the tiles sit
+   beside the readouts rather than on a row of their own: the readouts take the middle on their own
+   equal-column grid (wrapping whole cells onto a second line of the same columns rather than running
+   under the tiles), with the icon tiles beside them, all between slim ends. */
 .strip-grid.sideways {
   grid-template-columns:
     calc(var(--target-floor) + var(--space-1))
@@ -715,6 +749,17 @@ const notices = $derived(
   grid-row: 1;
   align-self: start;
   padding-inline-start: var(--space-1);
+}
+/* One readout per row, at very large text on a phone, where every spare line costs the chart: each
+   cell holds its two lines over the physical 44 px target floor rather than the enlarged control
+   height, with no neighbor to divide from, and the icon tiles hold the same floor, which fits every
+   pin a single More tile used to stand for. */
+.strip-grid.one-column .strip-readouts > :global(.data-cell) {
+  min-block-size: var(--target-floor);
+  border-inline-start: 0;
+}
+.strip-grid.one-column > :global(.pinned-actions) {
+  --bar-tile-size: var(--target-floor);
 }
 /* The cell-tap note floats above the strip, lifted over any safety rail by the shared clearance
    variable and layered below the safety strips so it can never cover a safety card. */
@@ -760,39 +805,6 @@ const notices = $derived(
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) {
   .slot-position,
   .slot-time {
-    display: none;
-  }
-}
-/* Very large text on a narrow phone, where not even two readout columns fit between the ends: a
-   column of one readout per row would stack the strip taller than the chart can spare and push a
-   safety strip off the screen. The cells set their label beside the value instead, at the physical
-   44 px target floor, and wrap as whole items. Two narrow columns and the two slim ends (a 44 px
-   target and its 4 px gap each; a query cannot read a custom property), so it only ever applies
-   at enlarged text. */
-@container status-strip (max-width: calc(11.5rem + 96px)) {
-  .strip-readouts {
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: var(--space-3);
-  }
-  .strip-readouts :global(.data-cell-value) {
-    line-height: 1.2;
-  }
-  .strip-readouts > :global(.data-cell) {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-1);
-    block-size: auto;
-    min-block-size: 44px;
-    border-inline-start: 0;
-  }
-  .strip-readouts > :global(.data-cell) > :global(.data-cell-label) {
-    flex: none;
-  }
-  /* Restated at the display rule's own specificity: this only ever applies on a phone, where
-     they leave. */
-  .strip-readouts > .slot-position,
-  .strip-readouts > .slot-time {
     display: none;
   }
 }
