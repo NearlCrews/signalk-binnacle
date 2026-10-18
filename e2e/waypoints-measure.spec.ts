@@ -258,7 +258,7 @@ test('measure edits middle points with pointer and keyboard paths, then restores
   await expect(strip.getByLabel('Previous measurement point')).toBeEnabled();
   await expect(strip.getByLabel('Next measurement point')).toBeEnabled();
 
-  const total = strip.locator('.selected-readout .metric').filter({ hasText: 'Total' });
+  const total = strip.locator('.selected-readout .data-cell').filter({ hasText: 'Total' });
   const totalBeforeDrag = await total.textContent();
   await strip.getByRole('button', { name: 'Move point' }).click();
   await page.mouse.move(middleX, middleY);
@@ -270,11 +270,11 @@ test('measure edits middle points with pointer and keyboard paths, then restores
 
   await strip.getByRole('button', { name: 'Delete measurement point 2' }).click();
   await expect(
-    strip.locator('.selected-readout .metric').filter({ hasText: 'Point 2 of 2' }),
+    strip.locator('.selected-readout .data-cell').filter({ hasText: 'Point 2 of 2' }),
   ).toBeVisible();
   await strip.getByRole('button', { name: 'Undo' }).click();
   await expect(
-    strip.locator('.selected-readout .metric').filter({ hasText: 'Point 2 of 3' }),
+    strip.locator('.selected-readout .data-cell').filter({ hasText: 'Point 2 of 3' }),
   ).toBeVisible();
 
   // MapLibre's canvas keyboard controls provide the non-pointer movement path. Pan, then commit the

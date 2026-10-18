@@ -242,14 +242,14 @@ $effect(() => {
       meters: number | undefined,
     )}
       {@const parts = metersOrNmParts(meters, units.mode)}
-      <b class="num">{parts.value}</b><span>{parts.unit}</span>
+      <b class="num">{parts.value}</b> <span>{parts.unit}</span>
     {/snippet}
     {#if selectedNumber !== undefined}
       <div class="metrics selected-readout" aria-live="polite">
         <div class="data-cell">
           <span class="data-cell-label">Point</span>
           <span class="data-cell-value"
-            ><b class="num">{selectedNumber}</b><span>of {measure.vertices.length}</span></span
+            ><b class="num">{selectedNumber}</b> <span>of {measure.vertices.length}</span></span
           >
         </div>
         {#if measure.selectedIncomingLeg}
@@ -257,8 +257,8 @@ $effect(() => {
             <span class="data-cell-label">Previous</span>
             <span class="data-cell-value"
               >{@render distance(measure.selectedIncomingLeg.distanceMeters)}
-              <b class="num">{formatBearingOr(measure.selectedIncomingLeg.bearingRad)}</b
-              ><span>&deg;T</span></span
+              <b class="num">{formatBearingOr(measure.selectedIncomingLeg.bearingRad)}</b>
+              <span>&deg;T</span></span
             >
           </div>
         {/if}
@@ -267,8 +267,8 @@ $effect(() => {
             <span class="data-cell-label">Next</span>
             <span class="data-cell-value"
               >{@render distance(measure.selectedOutgoingLeg.distanceMeters)}
-              <b class="num">{formatBearingOr(measure.selectedOutgoingLeg.bearingRad)}</b
-              ><span>&deg;T</span></span
+              <b class="num">{formatBearingOr(measure.selectedOutgoingLeg.bearingRad)}</b>
+              <span>&deg;T</span></span
             >
           </div>
         {/if}
@@ -288,8 +288,8 @@ $effect(() => {
         <div class="data-cell">
           <span class="data-cell-label">Bearing</span>
           <span class="data-cell-value"
-            ><b class="num">{formatBearingOr(measure.lastLeg.bearingRad)}</b
-            ><span>&deg;T</span></span
+            ><b class="num">{formatBearingOr(measure.lastLeg.bearingRad)}</b>
+            <span>&deg;T</span></span
           >
         </div>
         {#if measure.legs.length > 1}

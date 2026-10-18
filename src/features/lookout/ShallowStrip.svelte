@@ -52,8 +52,8 @@ function acknowledge(): void {
       <div class="data-cell">
         <span class="data-cell-label">Depth</span>
         <span class="data-cell-value"
-          ><b class="num">{formatLengthOr(shallow.depthMeters, units.mode)}</b
-          ><span>{unit}</span></span
+          ><b class="num">{formatLengthOr(shallow.depthMeters, units.mode)}</b>
+          <span>{unit}</span></span
         >
       </div>
       {#if shallow.insideServerZone}
@@ -65,8 +65,8 @@ function acknowledge(): void {
         <div class="data-cell">
           <span class="data-cell-label">Limit</span>
           <span class="data-cell-value"
-            ><b class="num">{formatLengthOr(shallow.effectiveLimitMeters, units.mode)}</b
-            ><span>{unit}</span></span
+            ><b class="num">{formatLengthOr(shallow.effectiveLimitMeters, units.mode)}</b>
+            <span>{unit}</span></span
           >
         </div>
       {/if}

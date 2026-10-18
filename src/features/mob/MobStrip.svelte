@@ -121,13 +121,13 @@ const steerWarning = $derived(
       <div class="data-cell">
         <span class="data-cell-label">Bearing</span>
         <span class="data-cell-value"
-          ><b class="num">{formatBearingOr(mob.bearingRad)}</b><span>&deg;T</span></span
+          ><b class="num">{formatBearingOr(mob.bearingRad)}</b> <span>&deg;T</span></span
         >
       </div>
       <div class="data-cell">
         <span class="data-cell-label">Range</span>
         <span class="data-cell-value"
-          ><b class="num">{range.value}</b><span>{range.unit}</span></span
+          ><b class="num">{range.value}</b> <span>{range.unit}</span></span
         >
       </div>
       {#if mob.elapsedSeconds !== undefined}

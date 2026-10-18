@@ -726,7 +726,9 @@ test('a raised alarm strip keeps AA text in day, dusk, and night-red', async ({ 
     await switchToTheme(page, theme);
     await expect(strip).toBeVisible();
     expect(await contrastRatio(strip.locator('.title'))).toBeGreaterThanOrEqual(4.5);
-    expect(await contrastRatio(strip.locator('.metric b').first())).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(strip.locator('.data-cell .num').first())).toBeGreaterThanOrEqual(
+      4.5,
+    );
   }
 });
 

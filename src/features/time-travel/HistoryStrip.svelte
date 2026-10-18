@@ -307,29 +307,29 @@ const liveMessage = $derived.by(() => {
           <div class="data-cell" title="Depth below transducer, average">
             <span class="data-cell-label">Depth · avg</span>
             <span class="data-cell-value"
-              ><b class="num">{formatLengthOr(current.depth ?? null, units.profile)}</b
-              ><span>{depthUnit}</span><span class="data-cell-qualifier">Xducer</span></span
+              ><b class="num">{formatLengthOr(current.depth ?? null, units.profile)}</b>
+              <span>{depthUnit}</span> <span class="data-cell-qualifier">Xducer</span></span
             >
           </div>
           <div class="data-cell" title="Peak apparent wind speed">
             <span class="data-cell-label">AWS · peak</span>
             <span class="data-cell-value"
-              ><b class="num">{formatSpeedOr(current.windApparent ?? null, units.profile)}</b
-              ><span>{speedUnitLabel}</span></span
+              ><b class="num">{formatSpeedOr(current.windApparent ?? null, units.profile)}</b>
+              <span>{speedUnitLabel}</span></span
             >
           </div>
           <div class="data-cell" title="Barometric pressure, average">
             <span class="data-cell-label">Baro · avg</span>
             <span class="data-cell-value"
-              ><b class="num">{formatPressureOr(current.pressure ?? null, units.profile)}</b
-              ><span>{baroUnit}</span></span
+              ><b class="num">{formatPressureOr(current.pressure ?? null, units.profile)}</b>
+              <span>{baroUnit}</span></span
             >
           </div>
           <div class="data-cell" title="Speed over ground, average">
             <span class="data-cell-label">SOG · avg</span>
             <span class="data-cell-value"
-              ><b class="num">{formatSpeedOr(current.sog ?? null, units.profile)}</b
-              ><span>{speedUnitLabel}</span></span
+              ><b class="num">{formatSpeedOr(current.sog ?? null, units.profile)}</b>
+              <span>{speedUnitLabel}</span></span
             >
           </div>
         </div>

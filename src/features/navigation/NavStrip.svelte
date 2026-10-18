@@ -346,11 +346,11 @@ const eta = $derived.by(() => {
     <div class="metrics">
       <div class="data-cell" title="Distance to waypoint{sourceSuffix('distance')}">
         <span class="data-cell-label">DTW</span>
-        <span class="data-cell-value"><b class="num">{dtw}</b><span>nm</span></span>
+        <span class="data-cell-value"><b class="num">{dtw}</b> <span>nm</span></span>
       </div>
       <div class="data-cell" title="Bearing to waypoint, degrees true{sourceSuffix('bearing')}">
         <span class="data-cell-label">BTW</span>
-        <span class="data-cell-value"><b class="num">{btw}</b><span>&deg;T</span></span>
+        <span class="data-cell-value"><b class="num">{btw}</b> <span>&deg;T</span></span>
       </div>
       <!-- Two columns hold the deviation track and the steer cue beside the number, so the cell keeps
            its width whether or not the boat is off track. -->
@@ -374,12 +374,14 @@ const eta = $derived.by(() => {
             {/if}
           </span>
           <span class="steer" class:sev-danger={xteAlarming}>{steer ?? ''}</span>
-          <b class="num" class:sev-danger={xteAlarming}>{xte}</b><span>nm</span>
+          <b class="num" class:sev-danger={xteAlarming}>{xte}</b> <span>nm</span>
         </span>
       </div>
       <div class="data-cell" title="Velocity made good toward the waypoint{sourceSuffix('vmg')}">
         <span class="data-cell-label">VMG</span>
-        <span class="data-cell-value"><b class="num">{vmg}</b><span>{speedUnit(units)}</span></span>
+        <span class="data-cell-value"
+          ><b class="num">{vmg}</b> <span>{speedUnit(units)}</span></span
+        >
       </div>
       <div
         class="data-cell"
@@ -398,7 +400,7 @@ const eta = $derived.by(() => {
       {#if routeProgress}
         <div class="data-cell" title="Route distance still to run across the legs ahead">
           <span class="data-cell-label">RTE</span>
-          <span class="data-cell-value"><b class="num">{routeDtg}</b><span>nm</span></span>
+          <span class="data-cell-value"><b class="num">{routeDtg}</b> <span>nm</span></span>
         </div>
         <div
           class="data-cell"

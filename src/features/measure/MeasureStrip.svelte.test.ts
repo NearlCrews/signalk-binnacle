@@ -35,7 +35,7 @@ describe('MeasureStrip', () => {
     // Each readout is a data cell: its label, then the value with its unit in its own slot.
     const cell = (label: string, value: string, unit: string) =>
       new RegExp(
-        `>${label}</span>\\s*<span class="data-cell-value">(<!---->)*<b class="num">${value}</b><span>${unit}</span>`,
+        `>${label}</span>\\s*<span class="data-cell-value">(<!---->)*<b class="num">${value}</b>\\s*<span>${unit}</span>`,
       );
     expect(body).toMatch(cell('Leg', '111', 'm'));
     expect(body).toMatch(cell('Bearing', '000', '°T'));

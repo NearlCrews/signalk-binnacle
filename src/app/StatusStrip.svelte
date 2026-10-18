@@ -339,7 +339,7 @@ const radarText = $derived(
     {title}
   >
     <span class="data-cell-label">{label}</span>
-    <span class="data-cell-value"><b class="num">{value}</b><span>{unit}</span></span>
+    <span class="data-cell-value"><b class="num">{value}</b> <span>{unit}</span></span>
   </span>
 {/snippet}
 

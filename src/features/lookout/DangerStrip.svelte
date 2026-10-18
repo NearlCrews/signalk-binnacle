@@ -101,7 +101,7 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
           <div class="data-cell" title="Closest point of approach: how near this vessel will pass">
             <span class="data-cell-label">CPA</span>
             <span class="data-cell-value"
-              ><b class="num">{formatNm(contact.cpaMeters)}</b><span>nm</span></span
+              ><b class="num">{formatNm(contact.cpaMeters)}</b> <span>nm</span></span
             >
           </div>
           {#if contact.receding}
@@ -115,7 +115,7 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
             <div class="data-cell" title="Time to the closest point of approach">
               <span class="data-cell-label">TCPA</span>
               <span class="data-cell-value"
-                ><b class="num">{formatTcpaMin(contact.tcpaSeconds, 1)}</b><span>min</span></span
+                ><b class="num">{formatTcpaMin(contact.tcpaSeconds, 1)}</b> <span>min</span></span
               >
             </div>
           {/if}

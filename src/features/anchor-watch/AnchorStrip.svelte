@@ -74,15 +74,15 @@ const acked = $derived(anchor.dragging ? anchor.acknowledged : anchor.blindAckno
       <div class="data-cell">
         <span class="data-cell-label">Off anchor</span>
         <span class="data-cell-value"
-          ><b class="num">{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b
-          ><span>{lengthUnit(units.mode)}</span></span
+          ><b class="num">{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b>
+          <span>{lengthUnit(units.mode)}</span></span
         >
       </div>
       <div class="data-cell">
         <span class="data-cell-label">Radius</span>
         <span class="data-cell-value"
-          ><b class="num">{formatLengthOr(anchor.radiusMeters, units.mode, 0)}</b
-          ><span>{lengthUnit(units.mode)}</span></span
+          ><b class="num">{formatLengthOr(anchor.radiusMeters, units.mode, 0)}</b>
+          <span>{lengthUnit(units.mode)}</span></span
         >
       </div>
     </div>
