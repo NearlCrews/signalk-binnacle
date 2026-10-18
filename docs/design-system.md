@@ -30,20 +30,25 @@ same size, sit on shared lines, and look the same.
   the same width, and an item that needs more takes a whole multiple (the vessel position takes two
   status-bar columns), never an odd size of its own.
 - **Aligned.** Lines run across the whole surface, not per item: every label on one line, every value
-  on one baseline, and every related row (a caution line, a wrapped second row) snapped to the same
+  on one baseline, and every related row (the pinned tiles, a wrapped second row) snapped to the same
   column edges as the row it belongs to.
 - **Consistent.** The same kind of thing gets the same treatment everywhere on the surface: one value
   size, one label style, a qualifier (unit, datum, reference) in the same slot, and one divider rule.
-- **Stable.** A row never changes shape to report a problem. A problem that belongs to one item shows
-  inside that item; anything else goes on a separate line that appears only while something is wrong.
-  Spare slots stay reserved, so an optional item appears without shifting its neighbors.
-- **Whole items give way.** When space runs out, a whole item moves (into More, or onto a wrapped row
-  of whole cells on the same columns), never a squeezed, clipped, or misaligned one.
+- **Stable.** A row never changes shape to report a problem, and a problem never adds a row or a line.
+  A problem that belongs to one item shows inside that item; anything else goes in the bar's one
+  fixed Status cell, which changes only its words, color, and count. Spare slots stay reserved, so an
+  optional item appears without shifting its neighbors.
+- **Anchored ends.** The status bar is the app's only chrome, and the menu and MOB bookend it at full
+  height on every screen: the menu at the leading end, MOB at the trailing end. Neither ever gives
+  way, moves, or sits behind a surface the bar opens.
+- **Whole items give way.** When space runs out, a whole item moves (into More, out of the bar, or
+  onto a wrapped row of whole cells on the same columns), never a squeezed, clipped, or misaligned
+  one.
 - **Proved with guides.** Alignment is checked against drawn guides or measured boxes in a real
   browser, not by eye: a mockup draws its grid and shared lines, and a browser check measures that
   nothing overflows its column.
 
-The status bar (section 5, Data cells) is the reference implementation.
+The status bar (section 5, Data cells and The status bar) is the reference implementation.
 
 ## 2. Design tokens are the only vocabulary
 
@@ -93,13 +98,13 @@ condition, and one used there drops the whole block.
   `createMediaQuery` shares one list and one change listener per query across every caller.
 - A phone held sideways is the one height-keyed layout: `LANDSCAPE_SHORT_QUERY`,
   `(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)`. Under it the status
-  strip keeps one row while three readout columns fit beside the pinned tiles (a 34rem container
-  query, in rem, so at very large text the tiles drop back onto their own row and the readouts keep
-  the full width): the readouts take the leading space on their own equal-column grid (wrapping whole
-  cells onto a second line of the same columns rather than running under the tiles), the pinned tiles
-  sit icon-only at the trailing edge with their accessible names and 44px targets, and the position
-  and time cells hide, including the last-fix coordinates and age, as they already do under 900px;
-  the No GPS fix notice stays on the caution line above. Tile capacity there is the responsive
+  bar keeps one row while three readout columns fit beside the pinned tiles (34rem of bar, measured
+  in rem, so at very large text the tiles drop back onto their own row and the readouts keep the full
+  width): slim menu and MOB ends at the two edges, the readouts on their own equal-column grid
+  (wrapping whole cells onto a second line of the same columns rather than running under the tiles),
+  and the pinned tiles icon-only beside them with their accessible names and 44px targets. The
+  position and time cells hide, including the last-fix coordinates and age, as they already do under
+  900px, and the Status cell keeps reporting a lost fix. Tile capacity there is the responsive
   maximum, because the bar is sized to its own tiles, and a blocked tile's note anchors to the bar's
   end with the shared `.transient-note--end` modifier. The width bound keeps a wide, short window or
   bar-type helm display on the desktop strip, with position, time, and labeled tiles.
@@ -109,12 +114,20 @@ condition, and one used there drops the whole block.
   Bottom controls add the clearance in normal layout flow so the chart shrinks above them. They do
   not use device detection, fixed positioning, or a second viewport-height calculation. Bottom and
   landscape-edge chrome must also include the appropriate `safe-area-inset-*` value. A landscape
-  phone is wider than the 600 px phone breakpoint, so it lays out with the wide rules: the top bar,
-  the docked `.panel-slot`, and the instrument dock reserve the inline insets there too, not only in
-  the phone branch. The chrome gutter tokens `--chrome-inset-start` and `--chrome-inset-end`
-  (`--space-3` plus that side's safe area) are the one inline edge for the top bar, the auth banner,
-  the top banners, the status badge, the MapLibre controls, the strip stack, and the safety rail, so
-  every one of them clears a notch on the same line.
+  phone is wider than the 600 px phone breakpoint, so it lays out with the wide rules: the status
+  bar, the docked `.panel-slot`, and the instrument dock reserve the inline insets there too, not only
+  in the phone branch. The chrome gutter tokens `--chrome-inset-start` and `--chrome-inset-end`
+  (`--space-3` plus that side's safe area) are the one inline edge for the auth banner, the top
+  banners, the status badge, the MapLibre controls, the strip stack, and the safety rail, so every one
+  of them clears a notch on the same line.
+- With no top bar the chart reaches the top of the screen, so `--chrome-inset-top`
+  (`env(safe-area-inset-top, 0px)`) is the top edge of everything floating there: the access banner,
+  the top banners, the MapLibre top controls, the docked panel slot, the instrument dock, the chart
+  hint, the safety rail's height cap, and the off-screen vessel arrow. The chart host clips what
+  floats on it (`overflow: clip`), so a banner or toast that outgrows the chart at very large text
+  can never paint over the status bar and MOB; the access banner scrolls inside the chart instead.
+  The installed desktop app keeps its own title bar (the manifest does not opt into window controls
+  overlay), since no top bar remains to hold the window controls.
 - `--tracking-caps` 0.06em for uppercase labels, `--disabled-opacity` 0.45, `--transition-fast`
   `120ms var(--ease-out)` for every hover and press, where `--ease-out` is
   `cubic-bezier(0.33, 1, 0.68, 1)`, the CSS form of Svelte's `cubicOut` that every surface
@@ -151,6 +164,8 @@ condition, and one used there drops the whole block.
   the route-edit strip is present.
 - Z-order is a token ladder, never a raw number: `--z-overlay` 1, `--z-panel` 2, `--z-safety-strips`
   (panel + 2), and `--z-menu` 5. The MOB confirm is a native top-layer `<dialog>`, above everything without a z-index.
+  The access banner sits at `--z-panel`, above MapLibre's own controls (z-index 2 in its stylesheet),
+  and a docked panel later in the page still covers it.
 
 ### Type roles
 
@@ -161,7 +176,7 @@ Pick the token by role, never by eye:
 | `--text-xs` | 0.75 | caps labels (`.caps-label`, `.data-cell-label`), units (`.tile .unit`, `.stat-grid .unit`, the status bar's units and datums), the bar's tile labels, badges, panel footers |
 | `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, and the instrument tile's loud abbreviation (`.abbr`, bold at body contrast) |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and the status bar's caution line |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and the Status list's rows |
 | `--text-input` | adaptive | ordinary text-entry controls: `--text-sm` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
 | `--text-input-large` | adaptive | stepped-up text-entry controls such as `UnitField` numerals and `.text-field.large`: `--text-md` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout), and a status bar word value (Paused, Standby, Course up), set on the numerals' baseline |
@@ -219,17 +234,14 @@ that matter when you do touch this:
   nonzero green against an AA contrast need in `tokens.css`.
 - Danger and caution must stay distinguishable in every theme. `--alarm` is the brighter, `--warning`
   the dimmer; that brightness gap is the contract.
-- The theme has two controls on one `ThemeController`: the toolbar button (tap to cycle, hold for
-  night) and Display's Day, Dusk, and Night choice. When the top bar runs out of room, the toolbar
-  button can give way (see the next item). Display is the path that is always reachable; keep it when
-  changing either control. Both read their names from `THEME_LABELS`.
-- The top bar shows no brand at any width; the `h1` stays for assistive technology, and the app name
-  and version live in the menu footer.
-- The top bar's chips never squeeze and never spill over MOB. The `yieldToFit` action (`src/app`)
-  measures the chips' natural widths against their flank and hides whole chips in rank order
-  (`data-yield`, highest first): Chart Locker, then the profile, the theme button, and Update. The
-  collision mute carries no rank and never yields. A new chip takes a rank in that order; the crowded
-  top bar test in `ui-quality.spec.ts` checks the guarantee at three widths.
+- The theme has two controls on one `ThemeController`: the menu's Night mode item and Display's Day,
+  Dusk, and Night choice, which also carries the automatic theme. Night mode goes straight to
+  night-red, never through dusk's brighter palette to dark-adapted eyes, and turning it off returns to
+  the lighter theme last in use (`nightToggleTarget`, with the device-local `lastLightTheme`, `dusk`
+  until one is known). It is pinnable to the bar. Display's choice reads its names from
+  `THEME_LABELS`.
+- No top bar carries a brand; the `h1` stays for assistive technology, and the app name and version
+  live in the menu footer.
 
 ## 4. The modular CSS architecture
 
@@ -354,32 +366,71 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   42.6154°N so it fits). The value and its unit never shrink; a trailing `.data-cell-qualifier` (a
   datum, an unassessed count) is the one part that may, and it and an overlong label end in an
   ellipsis, never a silent cut. Neighboring cells are divided by a hairline, which the host clears
-  beside an empty column. The status strip lays the cells on one grid of equal columns, in four
-  layouts:
-  - Stacked by default: a wrapping grid of equal columns at least `--data-cell-min` wide (5.75rem at
-    900 px and below, where the position leaves and no two-column cell remains), the pinned tiles on
-    their own row beneath.
-  - The helm row once the strip holds fourteen columns (`@container status-strip (min-width:
-    98.6rem)`, derived from `--data-cell-min` and the gutters and pinned by the design contract): five
-    instrument columns, four tile columns at the true center (fewer tiles start at the first tile
-    column, so every edge stays on the grid), two spare columns, two for the position, and one for
-    the time. The optional cells own fixed columns so one appearing never moves another: chart
-    orientation the first spare, the anchor watch the second, and the autopilot the second unless the
-    anchor holds it, when it takes the time column and Time steps aside. `reading-flow: grid-rows`
-    keeps focus order in the visual order.
+  beside an empty column.
+- The status bar (`StatusStrip`): the app's only chrome, one grid of equal columns on the data-cell
+  module. The menu (`AppMenu`'s trigger) and MOB (`MobButton` with `variant="bookend"`) are its two
+  ends, rendered into the bar's `start` and `end` snippet slots by App: full-height `.bar-bookend`
+  tiles (`strips.css`), one bar column each where the bar has room, and slim icon-only targets at
+  the physical 44 px floor (`--target-floor`) on a narrow bar or a sideways phone, where the label
+  stays for assistive tech. The source order is menu, MOB, readouts, tiles, so MOB is the second
+  focus stop at every size (`reading-order` keeps it there on the helm row). The bar measures its own
+  height into `--bar-block-size` on the shell, which surfaces opened from it use to stay above it.
+  Four layouts:
+  - Stacked by default: the ends take the first and last column the full height of the bar, the
+    readouts flow through the columns between them as a subgrid (so every cell edge is a bar column
+    edge) at least `--data-cell-min` wide (5.75rem at 900 px and below), and the pinned tiles sit on
+    their own row beneath, one tile per bar column and centered between the ends while the bar has a
+    column for each (`tiles-on-columns`), sharing the width otherwise.
+  - Slim ends while the bar holds fewer than six of its own columns (two ends and four readouts,
+    measured in the bar's column module so it follows the text size), and on every sideways phone.
+  - The helm row once the bar holds seventeen columns (`@container status-strip (min-width:
+    117.3rem)`, seventeen `--data-cell-min` columns of the bar's content box, pinned by the design
+    contract): the menu, the Status cell, five instrument columns, four tile columns (fewer tiles
+    start at the first tile column, so every edge stays on the grid, and the tiles opt into the
+    readouts' value baseline), two spare columns, two for the position, one for the time, and MOB.
+    The optional cells own fixed columns so one appearing never moves another: chart orientation the
+    first spare, the anchor watch the second, and the autopilot the second unless the anchor holds
+    it, when it takes the time column and Time steps aside.
   - The sideways phone row (section 2).
-  - Very large text on a narrow phone, where not even two columns fit (`max-width: 13rem`, in rem so
-    it never applies at the default size): the cells set their label beside the value at the
-    physical 44 px floor and wrap as whole items, so the strip never stacks one readout per row and
-    pushes a safety strip off the screen.
+  - Very large text on a narrow phone, where not even two columns fit between the slim ends
+    (`max-width: calc(11.5rem + 96px)`, so it never applies at the default size): the cells set their
+    label beside the value at the physical 44 px floor and wrap as whole items, so the bar never
+    stacks one readout per row and pushes a safety strip off the screen.
+
+  What gives way is decided by a measured budget (`readoutBudget`): the time first, then the
+  two-column position, then the compact set (the AIS cell leaves, and COG or HDG shows by context).
+  SOG, Depth, and the Status cell never give way; when even the compact set is too wide, whole cells
+  wrap onto a second row on the same columns.
 
   A problem that belongs to one readout shows inside its cell (dashed SOG and COG in the caution
-  voice, Depth Paused, Chart north up); every other problem goes on the caution line above, which
-  appears only while something is wrong and snaps each notice to whole columns of the same grid
-  through the `spanColumns` action. A phone carries no AIS cell, so degraded AIS assessment there is a
-  caution-line notice rather than an inserted cell. The alarm-sound notice offers an action only where
-  a tap can help: Enable while the browser blocks audio, Try again after the device failed, and no
-  action at all where Web Audio is unsupported. Every tappable cell and notice is a full 44px target.
+  voice, Depth Paused, Chart north up). Every other problem goes in the Status cell (`StatusCell`, fed
+  by `buildStatusNotices`), the first readout, always present and never resized:
+  - Calm, it reads All clear with the green connection dot, the light that used to sit in the bar's
+    edge.
+  - Otherwise it shows the worst problem's short word (red notices first, then amber, then news, each
+    in a fixed order that puts a collision mute and silenced alarm sound ahead of the missing
+    readings) in amber or red text with a hairline ring of the same color (a tint fill would drop the
+    text below AA in dusk), and a neutral `.badge--strong` count of the rest, which sort at or below
+    its grade.
+    Every word fits the narrowest column at `--text-lg`, which a browser test measures; a new notice
+    needs a word that passes it.
+  - A tap opens the Status list above the cell (`AnchoredMenu` as a dialog): one row per problem,
+    worst first, its full title, one explaining line, and its action (Enable, Try again, Reconnect,
+    Retry, Help, Unmute, Open Alarms, Use north up, Sign in, Reload), each action described by its
+    row. An action that clears its own row moves focus to the next; an emptied list closes and
+    returns focus to the cell. An alarm-grade safety event closes it, with the menu and More.
+  - The cell's name is its visible text followed by every other problem's word. Live notices
+    (Offline, a lost fix, no GPS yet, radar trouble) are announced once each as they appear, whether
+    or not they lead, through a polite region beside the cell; the connection phase keeps its own
+    always-mounted region (`.conn-live`).
+  - A Chart Locker sign-in is news, not a caution, since only an administrator can give it; real
+    Chart Locker trouble is amber.
+
+  The alarm-sound notice offers an action only where a tap can help: Enable while the browser blocks
+  audio, Try again after the device failed, and no action at all where Web Audio is unsupported.
+  Every tappable cell and list action is a full 44px target. A stacked tile or bar end centers its
+  icon and label as a pair; only a tile on a row shared with readouts sits its label on their value
+  baseline (`--bar-tile-*`).
 - Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-md +
   surface-raised; a bordered editor or card frame composes it rather than restating it), the card
   body shared by the saved cards, the `.card-list` report cards, and `.card-stack` for a one-off card
@@ -485,7 +536,7 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.menu-surface`
   (the anchored toolbar-menu surface layered on `.popover-card`: column layout, `--z-menu`, the
   `--menu-width` clamp, and the grow origin, shared by the overflow menu, the bottom-bar More menu,
-  and the profile switcher; a consumer declares only its width and, when it opens upward or
+  and the Status list; a consumer declares only its width and, when it opens upward or
   right-aligned, its origin corner), `.surface-elevated`
   (the larger floating-panel frame: surface + border + radius-lg + shadow-lg + edge-light, used by the
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
@@ -539,9 +590,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   one slot for each action the alarm offers, which holds its place once used. A done action leaves
   its word in its own slot (Acknowledged, Silenced, Muted here), a slot whose action stops applying
   mid-alarm stays as an empty `.slot-empty`, and acknowledging never removes the strip's other
-  actions (Raise anchor, Mute, Cancel stay where they were), so nothing slides under the thumb. An armed confirm reserves
-  its other label's width with `.label-reserve` and `data-reserve`, so arming changes only the
-  words. On a phone the group takes its own full-width row of equal cells. `.actions--safety`
+  actions (Raise anchor, Mute, Cancel stay where they were), so nothing slides under the thumb. An armed confirm is the
+  shared `ArmedButton`, which reserves its other label's width with `.label-reserve` and
+  `data-reserve`, so arming changes only the words. On a phone the group takes its own full-width row of equal cells. `.actions--safety`
   widens the gutter between paired safety buttons so a wrong tap in a seaway is less likely.
 
 ## 6. Shared UI primitives (`$shared/ui`)
@@ -620,6 +671,10 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints,
   profiles, and Chart Locker saved-area panels): arming one row disarms the rest. Use it instead of a
   per-panel `confirmingDelete` id. `ConfirmArm` stays the single timed strip.
+- `ArmedButton`: a strip's armed confirm button (Raise anchor, Stop, Steer to MOB, Cancel), driven
+  by a `ConfirmArm`'s `armed` flag. It swaps its words to the confirm question while reserving the
+  other label's width, so the button never moves its neighbors, and its visible text is its whole
+  accessible name. Never hand-write the `.label-reserve` markup.
 - `UnitField`: the labeled number-input-with-unit row for stored SI thresholds (commit on blur, snaps
   back to the effective value). Use it for a single number field with a unit; do not use it for a live
   drag (that is a `.range` slider). Pass `ariaDescribedBy` when a safety or validation note describes
@@ -898,6 +953,9 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 
 ## 8. Menus
 
+- The app menu opens from the status bar's leading end, which is its trigger at every size and never
+  a pinnable tile (a stored Menu pin is dropped on read). On a wide screen the launcher grows upward
+  from that end; at 900 px and below it is a sheet resting on the bar's top edge.
 - The app menu is the `AppMenu` launcher: a `.surface-elevated` frame holding a grid of tiles grouped by
   helm intent, every group on one tile module (the same columns whatever a group holds, so a short
   group leaves spare cells empty rather than widening its tiles), each tile top-aligned with its
@@ -905,10 +963,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   `sublabel` for a quiet second tile line when an item's current state is part of its identity
   (the Orientation tile's mode, the instrument dashboard's KIP acronym) so the label keeps one
   voice across the grid, `icon` a lucide component, `group` a section heading, `pressed` for a
-  toggle's lit state, `disabled` plus `disabledLabel`, `available` plus `unavailableHint`,
-  `barOnly` for an action whose home is the bottom bar (the Menu opener, which would otherwise be
-  a tile inside the menu it opens; it still renders as a tile while customizing, since tapping a
-  tile is the pin control), `onSelect`). Groups today:
+  toggle's lit state, `disabled` plus `disabledLabel`, `available` plus `unavailableHint`, `count`
+  plus `countNoun` for a live count chip, `onSelect`). Groups today:
   Chart, Navigate, Safety, Weather, Instruments, and Settings.
   Safety stays before Weather and Instruments; Settings stays last. Adding a menu option is one more
   `MenuItem`, never a change to the menu component. A capability whose provider is absent sets
@@ -922,10 +978,11 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   local Retry and a route to Signal K administration. When available, the same entry opens one
   landing page for saved areas, automatic caching, installed charts, and storage, rather than
   exposing provider internals as separate menu tiles.
-- A compact subsystem status reports only what it knows. The Offline header control may report cached
-  bytes, required access, an unreachable service, or an error. It must never turn provider health into
+- A compact subsystem status reports only what it knows. The Offline charts tile's second line may
+  report cached bytes, required access, an unreachable service, or an error, and its trouble also
+  reaches the Status cell. It must never turn provider health into
   a claim that a passage is ready. Coverage, included charts, completion state, and update time belong
-  on the saved-area card where the navigator can verify them together. Its access-needed state links
+  on the saved-area card where the navigator can verify them together. Its access-needed Sign in links
   directly to Signal K administrator sign-in in the current PWA window, with a redirect back to the
   current Binnacle route. A non-administrator session and an administrator session refused by Chart
   Locker are separate states. The latter offers retry instead of another sign-in prompt.
@@ -958,16 +1015,21 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 
 - 44 px (`--control-size`) for every action target; `--row-size` for list rows, defined as the same
   value so a row can never fall below that floor.
-- The status bar has no compact carve-out any more: every readout is a full-height data cell, so an
-  explain-tap cell (AIS, Depth) or notice (a weather warning, radar trouble) reveals its
-  `TransientNote` explanation from a full 44 px target, and every real action (Retry, Reconnect,
-  Help, Enable, the anchor and autopilot doors, the Chart cell) has the same target. The connection
-  dot is the one small target left, a quiet explain-tap in its gutter.
-- A cell or notice does not carry both an explain-tap and an action that already routes to the same
-  explanation. The link notices sit beside the connection dot, whose tap states the connection
-  diagnosis; Waiting for GPS carries Help, which opens the GPS readiness section; the Chart cell is
-  itself the return to north up, and a fallback's reason is on the caution line. Adding a second
-  target to those would crowd the row without telling the navigator anything new.
+- The status bar has no compact carve-out: every readout is a full-height data cell, so an
+  explain-tap cell (AIS, Depth) reveals its `TransientNote` explanation from a full 44 px target, and
+  every real action (the anchor and autopilot doors, the Chart cell, the Status cell, and each Status
+  list action: Retry, Reconnect, Help, Enable) has the same target. The connection dot lives inside
+  the Status cell, so no small target remains.
+- A cell does not carry both an explain-tap and an action that already routes to the same
+  explanation. A problem's explanation is its Status list row, which also carries its one action
+  (Waiting for GPS carries Help, which opens the GPS readiness section); the Chart cell is itself the
+  return to north up, and a fallback's reason and its Use north up are in the Status list. Adding a
+  second target to those would crowd the bar without telling the navigator anything new.
+- The status bar is never covered by a surface it opens. The menu's phone sheet rests on the bar's
+  top edge, `AnchoredMenu`'s backdrop stops there (`--bar-block-size`), and a tap on a bar control
+  while a menu is open closes that menu and acts in the same tap, so MOB is always one tap away. A
+  full-screen modal that covers the bar (the phone instrument dock, Data trends) carries its own MOB
+  through `emergencyAction`.
 - Destructive actions and derived-guidance navigation handoffs arm with `InlineConfirm`. They do not
   fire on a single tap.
 - Escape peels the topmost surface via the shared dismiss stack (`registerDismiss`), in last-opened
@@ -1039,8 +1101,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 - App chrome uses `@lucide/svelte` components, sized in px by role, always `aria-hidden="true"` when
   a text label is present: `size={16}` inside a text `.btn`, `size={18}` for an icon-only control in a
   header or row (a panel's back, close, minimize, and overflow controls share it, so a header row
-  never mixes sizes) and for a row-styled button, and `size={20}` only for the top bar's icon pills
-  (the app menu trigger and the theme toggle) and the MOB confirm icon, never a default. Pick an icon that reads true: AIS targets is a ship, the radar
+  never mixes sizes) and for a row-styled button, `size={20}` only for the MOB confirm icon, and
+  `size={24}` only for the status bar's two ends (the menu and MOB), never a default. Pick an icon that reads true: AIS targets is a ship, the radar
   is the radar sweep glyph, an anchor is an anchor.
 - Chart symbols are a separate system: they derive from the S-52 Presentation Library and OpenBridge,
   not from the UI icon set. That pipeline is a later spec.

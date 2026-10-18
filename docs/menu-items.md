@@ -22,7 +22,8 @@ source, and surrounding traffic before relying on it.
   needs fresh COG with way on; a stale or missing reference falls back to north immediately.
   While a rotating mode is chosen, the status strip's Chart cell shows what the chart is doing and
   its reference (Chart · COG, Course up), and one tap on the cell returns to north up. When the
-  reference fails, the cell says North up in the caution voice and the caution line names why.
+  reference fails, the cell says North up in the caution voice, and the Status cell reports the
+  fallback, with its reason and a Use north up action in the Status list.
   Rotation gestures stay disabled; the mode is the only author of chart bearing, and the chart
   stays flat (never pitched). Zoom controls provide gloved-hand alternatives to pinch, and
   the compact labeled scale reports nautical distance.
@@ -56,7 +57,8 @@ source, and surrounding traffic before relying on it.
 - **Offline charts** stays visible without Chart Locker and explains installation, startup, access,
   and chart-loading requirements. It manages saved areas, automatic caching, installed charts, and
   storage. The installation probe distinguishes a missing plugin, refused access, and a service or
-  network failure. The access-needed header status opens Signal K administrator sign-in directly.
+  network failure. The tile's second line reports the cache or the access state, and the
+  access-needed Sign in in the Status list opens Signal K administrator sign-in directly.
   Return to Binnacle after signing in; Chart Locker retries automatically. If Signal K already reports
   an administrator session, a Chart Locker refusal is shown as an access error with retry instead.
   Accepted saved-area downloads recover by area identifier when the immediate job response is lost.
@@ -369,23 +371,28 @@ source, and surrounding traffic before relying on it.
 ## Settings
 
 - **Display** groups the helm display environment: a true-black screen dim that stays pointer
-  transparent and never exceeds the alarm-distinguishable floor, a direct Day, Dusk, and Night
-  theme choice that stays reachable when a phone top bar hides its theme button to make room for an
-  Update or collision mute chip, the opt-in automatic day and
+  transparent and never exceeds the alarm-distinguishable floor, the direct Day, Dusk, and Night
+  theme choice, the opt-in automatic day and
   night theme (from the boat's day and night signal with a solar fallback, paused by a manual
   choice until the next boundary), the bright-sun chart contrast for direct sunlight, and the
   interface text size from 100 to 130 percent with controls no smaller than 44 px. All five travel
   with the active profile. With auto theme off, sunset raises a one-time offer to switch to the
   night theme.
-- **Profiles** (tile subtitle: units, sync, and privacy) saves portable chart, weather, threshold,
+- **Night mode** (bar label: Night) goes straight to the night-red theme in one tap, never through
+  dusk's brighter palette, and is lit while night-red is on. Turning it off returns to the lighter
+  theme last in use on this device (Dusk until one is known). It can be pinned to the bar; Display
+  keeps the full choice and the automatic theme.
+- **Profiles** (tile subtitle: the active profile, or units, sync, and privacy when none is active)
+  saves portable chart, weather, threshold,
   toolbar, instrument, Data trends, track,
   unit-fallback, planning, chart-orientation, and preferred anchor-radius settings. The active profile saves
   automatically after a short debounce. Each device keeps its own active choice, while profiles and
   the default sync
   through the authenticated Signal K account. A remote change to the active profile is offered for
   explicit application or rejection so the chart does not change underneath the navigator; the
-  prompt names the setting categories that differ, and the profile switcher in the top bar carries
-  an update indicator so the offer is discoverable without opening the panel. The
+  prompt names the setting categories that differ, and the Profiles tile carries a count of one
+  waiting update so the offer is discoverable without opening the panel. Switching profiles happens
+  in the panel, one tap per profile. The
   browser persists the last-applied setup separately, so an unresolved update survives reload.
   Imports are
   size-limited, deeply validated, bounded, and report the number saved. Profile names, ids, settings,
@@ -413,41 +420,51 @@ source, and surrounding traffic before relying on it.
 
 ## Toolbar and status strip
 
-- The bottom toolbar carries pinned actions, chosen by tapping tiles while customizing. The
-  default set is Menu, Center, Follow, and AIS: the Menu opener sits in the bar because on a phone
-  the top-bar hamburger is a cross-screen reach, and AIS keeps one Safety action thumb-reachable
-  with its live collision-risk count. Pinning Menu hides the top-bar hamburger, so exactly one
-  control named Menu exists at a time. Menu renders as a launcher tile only while customizing,
-  since tapping a tile is the pin control. Pinned actions can be dragged, moved with the keyboard,
-  or changed through their **Reorder** menu's **Move up** and **Move down** actions. Moves preserve
-  focus and announce the new position; Reset requires confirmation. The actions are equal tiles, an
-  icon over its label. When the bar cannot fit its actions, **More** exposes the overflow while
-  keeping Menu reachable; the helm row holds four tiles.
-- The status strip is one grid of equal columns. Every readout is a cell with a caps label over its
-  value, every value is one size on one shared baseline, and the position takes two columns. On a
-  display about 1,580 px wide at the default text size, the strip is one helm row: AIS, SOG, COG,
-  HDG, and Depth, the pinned tiles at the center, then the chart orientation, anchor, and autopilot
-  cells when present, each in its own column, the position, and the time (which the autopilot
-  displaces while the anchor watch is also showing). Narrower displays put the tiles on their own
-  row under a wrapping grid of whole cells. A phone held sideways keeps one row, and very large text
-  on a narrow phone sets each label beside its value so the strip stays short.
+- The status bar is the only chrome: there is no top bar. The menu and MOB are its two ends, full
+  height at every size, the menu at the leading end and MOB at the trailing end. Neither ever gives
+  way, and MOB is the second keyboard stop after the menu. Anything the bar opens (the menu, its
+  phone sheet, the Status list, More) opens above it and never covers it; a tap on the bar while one
+  is open closes it and acts in the same tap, and an alarm-grade safety event closes them all.
+- The bar carries pinned actions, chosen by tapping tiles while customizing. The default set is
+  Center, Follow, Charts, and AIS; AIS keeps one Safety action thumb-reachable with its live
+  collision-risk count. The menu is never a pin, since it is always the bar's own end; a stored Menu
+  pin from an earlier version is dropped. Pinned actions can be dragged, moved with the keyboard, or
+  changed through their **Reorder** menu's **Move up** and **Move down** actions, and moves count
+  slots on the bar as shown. Moves preserve focus and announce the new position; Reset requires
+  confirmation. The actions are equal tiles, an icon over its label, centered as a pair, and while
+  the bar has a column for each they take one bar column each, centered between the ends. When the
+  bar cannot fit its actions, **More** exposes the overflow; the helm row holds four tiles.
+- The readouts are one grid of equal columns. Every readout is a cell with a caps label over its
+  value, every value is one size on one shared baseline, and the position takes two columns. The
+  Status cell leads them. On a display about 1,890 px wide at the default text size, the bar is one
+  helm row: the menu, Status, AIS, SOG, COG, HDG, and Depth, the pinned tiles, then the chart
+  orientation, anchor, and autopilot cells when present, each in its own column, the position, the
+  time (which the autopilot displaces while the anchor watch is also showing), and MOB. Narrower
+  displays put the tiles on their own row under a wrapping grid of whole cells, between the two
+  ends. When the readouts do not fit, whole ones give way: the time, then the position, then AIS
+  and one of COG and HDG. A phone held sideways keeps one row with slim ends, and very large text on
+  a narrow phone sets each label beside its value so the bar stays short.
 - A problem with one readout shows in its own cell: dashed SOG and COG in the caution voice while the
   fix is lost, Depth Paused while the shallow watch is paused, Last fix with its age on the position,
-  and the anchor, shallow, and autopilot states in their cells. Every other problem goes on the
-  caution line above the readouts, which appears only while something is wrong and snaps to the
-  same columns: Data link failed with Retry, a lost or silent connection with Reconnect, Offline,
-  No GPS fix, Waiting for GPS with Help, an orientation fallback, a weather warning, the alerts count
-  (warn and alert grades, which sound nothing and raise no strip; it opens Alarms), radar trouble,
-  unassessed AIS targets on a phone (which has no AIS cell), and the alarm-sound notice, which
-  appears while a watch is armed (anchor, shallow water, AIS targets in range, an active route, or a
-  raised alarm) on a display that cannot sound it: **Alarm sound off** with Enable while the browser
-  blocks audio, **Alarm sound failed** with Try again after the device failed, and **Alarm sound
-  unavailable**, which only explains, where Web Audio is missing. A calm chart shows no caution
-  line.
-- Readouts explain themselves on touch: tapping the connection dot, the AIS cell, the Depth cell, a
-  weather warning, or radar trouble shows its explanation as a transient note above the strip. The
-  anchor cell opens Anchor watch, the AP cell opens the autopilot, and every tappable cell and notice
-  is a full 44 px target. Short screens use compact spacing without shrinking the 44 px controls.
+  and the anchor, shallow, and autopilot states in their cells. Every problem also reaches the
+  Status cell, which never moves or changes size: calm, it reads All clear with the green connection
+  dot; otherwise it shows the worst problem's short word, in red for a dropped link, Offline, or
+  failed radar and amber for a caution, with a count of the rest. A tap opens the Status list, every
+  problem worst first with its explanation and action: Data link failed with Retry, a lost or
+  silent connection with Reconnect, Offline, No GPS fix, Waiting for GPS with Help, a collision alarm
+  mute with Unmute, a paused shallow watch, the alerts count (warn and alert grades, which sound
+  nothing and raise no strip; Open Alarms), unassessed AIS targets with Open AIS, a weather warning
+  with Open forecast, radar trouble with Open radar, an orientation fallback with Use north up,
+  Chart Locker sign-in (Sign in) or trouble (Retry or Open offline charts), a ready update with
+  Reload, and the alarm-sound notice, which appears while a watch is armed (anchor, shallow water,
+  AIS targets in range, an active route, or a raised alarm) on a display that cannot sound it:
+  **Alarm sound off** with Enable while the browser blocks audio, **Alarm sound failed** with Try
+  again after the device failed, and **Alarm sound unavailable**, which only explains, where Web
+  Audio is missing. Live problems are announced once each as they appear.
+- Readouts explain themselves on touch: tapping the AIS cell, the Depth cell, or a fallen-back Chart
+  cell shows its explanation as a transient note above the bar. The anchor cell opens Anchor watch,
+  the AP cell opens the autopilot, and every tappable cell and Status list action is a full 44 px
+  target. Short screens use compact spacing without shrinking the 44 px controls.
 - While the Signal K link itself is down or silent, the readouts that pause with it (GPS, speed,
   course, heading, and the depth watch) are subordinated, with a dashed underline on any held value,
   so the strip presents one failure with one action. Radar health is excluded: it rides the radar provider's own stream, not this link.

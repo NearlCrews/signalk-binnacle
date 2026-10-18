@@ -351,7 +351,7 @@ root. App and PlotterView own the explicit construction and wiring between those
   `.btn` and `.icon-pill` bases it overrides, so do not reorder the manifest blindly. New global styling
   goes into the right module, never back into one monolith; new shared UI behavior goes through
   the `$shared/ui` primitives (SlideOver, PanelHeader, AnchoredMenu, InlineConfirm, UnitField,
-  PositionFields, ConfirmArm, SavedList,
+  PositionFields, ConfirmArm, ArmedButton (a strip's armed confirm button over a ConfirmArm), SavedList,
   VisibilityToggle, ShowOnChartToggle, and LayerToggle (the three share one VisibilityToggleProps
   contract and render one drawn switch; LayerToggle's `kind="checkbox"` is for a selection a later action
   uses), EmptyState and the SavedList `empty` union, LoadNote (Retry for a failed request, Check again
@@ -377,7 +377,7 @@ root. App and PlotterView own the explicit construction and wiring between those
   `.btn-alarm` (strip actions are the shared button system), `.pill-count` (the small count
   chip shared by the toolbar's collapsed More pill and a menu item's live count), `.popover-card`,
   `.menu-surface` (the anchored toolbar-menu surface layered on `.popover-card`, shared by the
-  overflow menu, the bottom-bar More menu, and the profile switcher; consumers declare only
+  overflow menu, the bottom-bar More menu, and the Status list; consumers declare only
   `--menu-width` and, when needed, the origin corner), the
   `.surface-elevated` floating-panel frame, `.modal-card`, `.menu-item`, the `.row-interactive`
   control-height interactive-row base composed by the weather, route, and layers-category rows (it
@@ -713,6 +713,11 @@ last year, and a stable API surface.
   `docs/design-system.md` section 1 states the rule; the status bar's data-cell grid is the
   reference implementation. Check alignment against drawn guides or measured boxes in a browser,
   not by eye.
+- One bar (owner rule, 2026-10-18): there is no top bar. The status bar is the only chrome, and the
+  menu and MOB bookend it at full height on every screen; neither ever gives way, and nothing the
+  bar opens may cover it. A problem never adds a row, chip, or line: it shows in its own readout or
+  in the one fixed Status cell (`buildStatusNotices`). The chart host clips what floats on it, so
+  nothing on the chart can paint over the bar and MOB.
 - One coherent design system, not disjointed widgets: every new surface uses the shared tokens
   (src/styles/), the shared UI primitives ($shared/ui), the established interaction patterns
   (SlideOver, InlineConfirm, armed confirms, the dismiss stack, 44px targets), and the same API

@@ -6,6 +6,49 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add a Night mode menu item that goes straight to night-red, never through dusk, and returns to
+  the lighter theme last in use; it can be pinned to the bar.
+
+### Changed
+
+- Fold the top bar into the status bar, so the chart reaches the top of the screen: on a 1400 by
+  700 tablet the chart grows from 71% of the screen to about 85%. The menu and MOB stand at the
+  bar's two ends, full height on every screen, and MOB is the second keyboard stop. The menu, its
+  phone sheet, and every list the bar opens appear above the bar and never cover it; a tap on the
+  bar while one is open closes it and acts in the same tap.
+- Report every problem that is not one readout's own in one fixed Status cell instead of a caution
+  line above the readouts: the worst problem in a short word, in red or amber, with a count of
+  the rest, and All clear with the connection dot when calm. A tap opens the full list with each
+  problem's explanation and action. A paused shallow watch and unassessed AIS targets now count
+  there too, and live problems are announced once each as they appear.
+- Move the Chart Locker, profile, update, and collision mute chips out of the top bar: Offline
+  charts and Profiles show their state on their menu tiles, and the update and mute report in the
+  Status cell.
+- Center the icon and label on the bar's tiles, and lay the tiles on whole bar columns, centered
+  between the ends.
+- When the readouts do not fit, give way whole in a fixed order: the time, then the position, then
+  AIS and one of COG and HDG.
+- Keep the installed desktop app's own title bar, now that no top bar holds the window controls.
+
+### Removed
+
+- Remove the Menu pin, since the menu is always the bar's own end; a stored Menu pin is dropped.
+
+### Fixed
+
+- Keep the zoom buttons, the first-run chart hint, and the off-screen vessel arrow below the access
+  banner instead of over its Approve button, and clear a top status bar or cutout.
+- Keep a banner or toast that outgrows the chart at very large text inside the chart, where the
+  access banner now scrolls, instead of covering the status bar and MOB.
+- Count a pinned-action move on the bar as shown, so an id the bar cannot show no longer shifts
+  where a moved tile lands.
+- Name each instrument tile by what it shows, so a speech-input user can say its reading or its
+  abbreviation (SOG, AWS) to open it.
+- Give the MOB confirm's Mark man overboard button the MOB key's solid fill, so its text meets AA
+  contrast in the dusk theme.
+
 <a id="v0240"></a>
 
 ## [0.24.0] - 2026-10-18

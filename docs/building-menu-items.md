@@ -337,10 +337,20 @@ entry.
 
 The app menu's toolbar editor also shows the current pinned bar order. Use the shared `createReorder`
 controller for dragging, ArrowUp or ArrowDown movement, and `ReorderActions` Move up and Move down
-buttons. Keep the stored `pinnedActionIds` order as the source of truth, and include a reset action
-that restores `DEFAULT_PINNED`. The menu tile grid still controls membership by tapping tiles in edit
-mode. Starter profiles keep Menu and an appropriate safety shortcut visible on a fresh helm without
-replacing an existing profile's deliberate pins.
+buttons. Keep the stored `pinnedActionIds` order as the source of truth, count a move's slot on the
+bar as shown (`reorderShownPinned`, so an id the bar cannot show never shifts it), and include a
+reset action that restores `DEFAULT_PINNED`. The menu tile grid still controls membership by tapping
+tiles in edit mode. The menu itself is never a pin: it is always the status bar's leading end, and a
+retired id is dropped from stored and applied lists (`pinnedIdsCodec`). Starter profiles keep an
+appropriate safety shortcut visible on a fresh helm without replacing an existing profile's
+deliberate pins.
+
+A new problem state never adds a row, a chip, or a line to the chrome. A problem that belongs to one
+readout shows inside that readout's cell; anything else is a notice in `buildStatusNotices`
+(`src/app/status-notices.ts`): a tone (red only when data or the internet has stopped, amber for a
+caution, info for news), a place in `NOTICE_ORDER`, a short cell word that fits the narrowest bar
+column (the Status cell's word test measures it), the full title and one explaining line for the
+Status list, its one action, and `live` when a screen reader must hear it appear.
 
 ---
 

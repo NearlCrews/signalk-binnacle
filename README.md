@@ -255,10 +255,11 @@ A few interactions cover most of the helm:
 - **Prepare offline charts.** Open **Offline charts**, choose **Save a chart area**, draw over the
   passage, review the included charts and detail, and start the download. Confirm the saved area's
   status and update date before relying on it away from coverage.
-- **Switch themes.** Cycle the day, dusk, and night-red themes from the theme control in the top bar,
-  or pick one directly in **Display**. Night-red is red on true black for a dark-adapted watch.
-- **Mark a man overboard.** Tap the always-visible **MOB** button in the top bar and confirm to mark
-  the spot, raise the boat-wide alarm, and start the recovery strip.
+- **Switch themes.** Tap **Night mode** in the menu to go straight to night-red and back, or pick
+  day, dusk, or night directly in **Display**. Night-red is red on true black for a dark-adapted
+  watch.
+- **Mark a man overboard.** Tap the always-visible **MOB** key at the right end of the status bar
+  and confirm to mark the spot, raise the boat-wide alarm, and start the recovery strip.
 
 For caching behavior, storage, and HTTPS requirements, see the Offline charts, Chart Locker, and
 SSL section below.
