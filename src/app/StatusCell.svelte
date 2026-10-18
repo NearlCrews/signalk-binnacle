@@ -38,6 +38,13 @@ function close(restoreFocus: boolean): void {
   if (restoreFocus) void tick().then(() => cell?.focus());
 }
 
+// An action that opens a panel hands the screen to it, so the list closes; one that fixes the
+// problem in place (Enable, Reconnect, Unmute) leaves the list open on the result.
+function act(action: Extract<NonNullable<StatusNotice['action']>, { kind: 'button' }>): void {
+  action.run();
+  if (action.opens) close(false);
+}
+
 function toggle(): void {
   if (open) close(false);
   else open = true;
@@ -54,9 +61,10 @@ function focusFirst(): void {
   surface.focus();
 }
 
-// A polite announcement of each live notice as it newly appears, worst or not. A notice that
-// leaves clears the region, so one that returns is announced again; a change of order alone says
-// nothing. Notices already present when the bar mounts are not announced.
+// A polite announcement of each live notice as it newly appears, worst or not, and again when its
+// words change (radar going from stale to failed keeps its id). A notice that leaves clears the
+// region, so one that returns is announced again; a change of order alone says nothing. Notices
+// already present when the bar mounts are not announced.
 let announcement = $state('');
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping the effect reads untracked
 const seen = new Set<string>();
@@ -65,7 +73,8 @@ let generation = 0;
 $effect(() => {
   const live = notices.filter((notice) => notice.live);
   untrack(() => {
-    const present = new Set<string>(live.map((notice) => notice.id));
+    const key = (notice: StatusNotice): string => `${notice.id}\n${notice.title}`;
+    const present = new Set<string>(live.map(key));
     let left = false;
     for (const id of seen) {
       if (!present.has(id)) {
@@ -73,8 +82,8 @@ $effect(() => {
         left = true;
       }
     }
-    const fresh = live.filter((notice) => !seen.has(notice.id));
-    for (const notice of fresh) seen.add(notice.id);
+    const fresh = live.filter((notice) => !seen.has(key(notice)));
+    for (const notice of fresh) seen.add(key(notice));
     if (!seeded) {
       seeded = true;
       return;
@@ -169,12 +178,12 @@ $effect(() => {
               >{notice.action.label}</a
             >
           {:else if notice.action?.kind === 'button'}
-            {@const run = notice.action.run}
+            {@const action = notice.action}
             <button
               type="button"
               class="btn"
               aria-describedby="status-row-{notice.id}"
-              onclick={run}
+              onclick={() => act(action)}
             >
               {notice.action.label}
             </button>

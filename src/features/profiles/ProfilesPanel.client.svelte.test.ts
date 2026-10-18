@@ -133,7 +133,11 @@ describe('ProfilesPanel cancellation focus', () => {
     const destination = button(target, 'Save current as profile');
     destination.focus();
     flushSync();
-    await vi.waitFor(() => expect(target.querySelector('[role="menu"]')).toBeNull());
+    // The menu leaves through its exit transition, which a loaded test run can stretch past the
+    // default one-second wait.
+    await vi.waitFor(() => expect(target.querySelector('[role="menu"]')).toBeNull(), {
+      timeout: 5_000,
+    });
     expect(document.activeElement).toBe(destination);
   });
 

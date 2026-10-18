@@ -18,25 +18,19 @@ const { map, position, positionStale = false, onCenter }: Props = $props();
 const EDGE_INSET = 28;
 
 // The chart reaches the top of the screen, where a status bar or cutout may overlay it and the
-// access banner may sit: the arrow keeps clear of both. The inset is an env() expression, read
-// through a probe inside the chart; the banner's height is published on the chart host.
-function topInset(): number {
+// access banner may sit: the arrow keeps clear of both. Both are measured off the render path: the
+// inset (an env() expression) through a probe inside the chart when the chart resizes, and the
+// banner's height, which the chart host publishes, when that style changes.
+function measureTopClearance(): number {
   const probe = document.createElement('div');
   probe.style.cssText =
-    'position:absolute;visibility:hidden;padding-block-start:var(--chrome-inset-top)';
+    'position:absolute;visibility:hidden;padding-block-start:calc(var(--chrome-inset-top) + var(--auth-banner-height, 0px))';
   map.getContainer().append(probe);
-  const inset = Number.parseFloat(getComputedStyle(probe).paddingBlockStart) || 0;
+  const clearance = Number.parseFloat(getComputedStyle(probe).paddingBlockStart) || 0;
   probe.remove();
-  return inset;
+  return clearance;
 }
-let insetTop = 0;
-function bannerHeight(): number {
-  return (
-    Number.parseFloat(
-      getComputedStyle(map.getContainer()).getPropertyValue('--auth-banner-height'),
-    ) || 0
-  );
-}
+let topClearance = 0;
 
 let visible = $state(false);
 let x = $state(0);
@@ -50,39 +44,56 @@ function recompute(): void {
     return;
   }
   const canvas = map.getCanvas();
-  const centerX = canvas.clientWidth / 2;
-  const centerY = canvas.clientHeight / 2;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  // The clear rectangle the arrow may sit in: inset from every edge, and below the top clearance.
+  const left = EDGE_INSET;
+  const right = width - EDGE_INSET;
+  const top = EDGE_INSET + topClearance;
+  const bottom = height - EDGE_INSET;
+  if (right <= left || bottom <= top) {
+    visible = false;
+    return;
+  }
   const point = map.project(latLonToLonLat(pos));
+  bearingDeg = (Math.atan2(point.x - width / 2, -(point.y - height / 2)) * 180) / Math.PI;
+  // Clamp the true (possibly far off-canvas) point to that rectangle along the line from its
+  // center, so the arrow sits at the edge closest to the vessel.
+  const centerX = (left + right) / 2;
+  const centerY = (top + bottom) / 2;
   const dx = point.x - centerX;
   const dy = point.y - centerY;
-  bearingDeg = (Math.atan2(dx, -dy) * 180) / Math.PI;
-  // Clamp the true (possibly far off-canvas) point to the inset canvas rectangle, projected along
-  // the line from center to that point, so the arrow sits at the edge closest to the vessel.
-  const halfW = centerX - EDGE_INSET;
-  const halfH = centerY - EDGE_INSET - (dy < 0 ? insetTop + bannerHeight() : 0);
   const scale = Math.min(
-    dx !== 0 ? Math.abs(halfW / dx) : Number.POSITIVE_INFINITY,
-    dy !== 0 ? Math.abs(halfH / dy) : Number.POSITIVE_INFINITY,
+    1,
+    dx !== 0 ? Math.abs((right - centerX) / dx) : Number.POSITIVE_INFINITY,
+    dy !== 0 ? Math.abs((bottom - centerY) / dy) : Number.POSITIVE_INFINITY,
   );
   x = centerX + dx * scale;
   y = centerY + dy * scale;
   visible = true;
 }
 
-// The map instance is a stable prop for this component's lifetime, so this listener is registered
-// once; recompute also runs on every repaint (pan and zoom), matching the cadence overlay-tick.ts
-// already drives every GL-layer overlay from.
+// The map instance is a stable prop for this component's lifetime, so these listeners are
+// registered once; recompute also runs on every repaint (pan and zoom), matching the cadence
+// overlay-tick.ts already drives every GL-layer overlay from.
 $effect(() => {
-  const measureTop = (): void => {
-    insetTop = topInset();
+  const remeasure = (): void => {
+    topClearance = measureTopClearance();
+    recompute();
   };
-  measureTop();
-  // The inset changes with rotation, which resizes the chart.
-  const observer = new ResizeObserver(measureTop);
-  observer.observe(map.getContainer());
+  topClearance = measureTopClearance();
+  const container = map.getContainer();
+  const resize = new ResizeObserver(remeasure);
+  resize.observe(container);
+  // Whichever ancestor publishes the banner's height, watched for that style changing.
+  let host = container.parentElement;
+  while (host && !host.style.getPropertyValue('--auth-banner-height')) host = host.parentElement;
+  const banner = new MutationObserver(remeasure);
+  if (host) banner.observe(host, { attributes: true, attributeFilter: ['style'] });
   map.on('render', recompute);
   return () => {
-    observer.disconnect();
+    resize.disconnect();
+    banner.disconnect();
     map.off('render', recompute);
   };
 });

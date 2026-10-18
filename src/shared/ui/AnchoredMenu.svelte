@@ -172,15 +172,17 @@ $effect(() => {
   };
 });
 
-// The status bar stays live under every menu: the backdrop stops at its top edge, so a tap there
-// reaches the bar's control instead of the backdrop. That tap also closes the menu, without being
-// swallowed, so MOB is one tap away whatever is open. Taps anywhere else still meet the backdrop.
-// The menu's own opener group (its trigger) and anchor are excluded, since their click toggles it.
+// Live chrome (an element marked data-live-chrome: the status bar, which holds MOB) stays live under
+// every menu. The backdrop stops at its top edge (--bar-block-size, which the shell publishes), so a
+// tap there reaches the chrome's control instead of the backdrop, and that tap also closes the menu
+// without being swallowed, so MOB is one tap away whatever is open. Taps anywhere else still meet the
+// backdrop. The menu's own opener group (its trigger) and anchor are excluded, since their click
+// toggles it.
 $effect(() => {
   if (!open) return;
   const onPointerDown = (event: PointerEvent): void => {
     const target = event.target;
-    if (!(target instanceof Element) || !target.closest('.status-strip')) return;
+    if (!(target instanceof Element) || !target.closest('[data-live-chrome]')) return;
     const surface = surfaceRef;
     if (surface?.contains(target) || anchor?.contains(target)) return;
     if (surface?.closest('[data-menu-opener-group]')?.contains(target)) return;

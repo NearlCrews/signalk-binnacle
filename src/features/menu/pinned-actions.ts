@@ -10,7 +10,26 @@ export const DEFAULT_PINNED: readonly string[] = ['center', 'follow', 'layers', 
 // Ids that were once pinnable and no longer are: the menu opener, now the bar's own end.
 const RETIRED_PINNED_IDS: ReadonlySet<string> = new Set(['menu']);
 
+// The sets that shipped as defaults while the menu was a pin (the bar's own and the three starter
+// profiles'), each with its successor, so a bar nobody customized gets the current set rather than
+// one tile short of it.
+const LEGACY_DEFAULTS: ReadonlyArray<readonly [readonly string[], readonly string[]]> = [
+  [['menu', 'center', 'follow', 'ais'], DEFAULT_PINNED],
+  [
+    ['menu', 'center', 'ais', 'radar'],
+    ['center', 'ais', 'radar', 'night'],
+  ],
+  [
+    ['menu', 'anchor', 'tides', 'instruments'],
+    ['anchor', 'tides', 'instruments', 'layers'],
+  ],
+];
+
 export function cleanPinned(ids: readonly string[]): string[] {
+  const legacy = LEGACY_DEFAULTS.find(
+    ([old]) => old.length === ids.length && old.every((id, index) => ids[index] === id),
+  );
+  if (legacy) return [...legacy[1]];
   return ids.filter((id) => !RETIRED_PINNED_IDS.has(id));
 }
 
@@ -23,9 +42,10 @@ export function pinnedIdsCodec(): PersistedCodec<string[]> {
       const result = strings.decode(value);
       if (result.state === 'invalid') return result;
       const cleaned = cleanPinned(result.value);
-      return cleaned.length === result.value.length
-        ? result
-        : { state: 'migrated', value: cleaned };
+      const same =
+        cleaned.length === result.value.length &&
+        cleaned.every((id, index) => result.value[index] === id);
+      return same ? result : { state: 'migrated', value: cleaned };
     },
     encode: (ids) => cleanPinned(ids),
   };

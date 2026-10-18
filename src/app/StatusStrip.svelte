@@ -10,7 +10,7 @@ import {
   type OwnVessel,
 } from '$entities/vessel';
 import { AutopilotChip } from '$features/autopilot';
-import { type MenuItem, PinnedActions } from '$features/menu';
+import { MAX_BAR_PILLS, MAX_COMPACT_BAR_PILLS, type MenuItem, PinnedActions } from '$features/menu';
 import type { CompanionState } from '$features/prewarm';
 import { type AlarmAudioState, primeAlarmAudio } from '$shared/audio';
 import {
@@ -217,8 +217,6 @@ const landscapeShort = createMediaQuery(LANDSCAPE_SHORT_QUERY);
 const SLIM_BAR_COLUMNS = 6;
 // A sideways phone keeps one row while three readout columns fit beside the tiles.
 const SIDEWAYS_ROW_REM = 34;
-// The most pinned tiles the bar lays on its own columns.
-const MAX_TILE_COLUMNS = 6;
 let footer = $state<HTMLElement>();
 let grid = $state<HTMLElement>();
 let readouts = $state<HTMLElement>();
@@ -298,9 +296,13 @@ const showHdg = $derived(
 const lookoutOpen = $derived(connectionPhase === 'open');
 const showLookout = $derived(lookoutOpen && !compact);
 
-// The pinned tiles take whole bar columns, centered between the ends, while the bar has a column
-// for each; otherwise they share the readouts' width as equal tiles.
-const tileSpan = $derived(Math.min(pinnedActions.length, MAX_TILE_COLUMNS));
+// The pinned tiles take whole bar columns, centered between the ends as closely as whole columns
+// allow (an odd leftover leans toward the start), while the bar has a column
+// for each; otherwise they share the readouts' width as equal tiles. The span is what the bar
+// draws: every pin up to the bar's cap (the cap counts the More tile when there are more).
+const tileSpan = $derived(
+  Math.min(pinnedActions.length, compactQuery.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS),
+);
 const tilesOnColumns = $derived(
   !sideways && Number.isFinite(readoutColumns) && tileSpan > 0 && readoutColumns >= tileSpan,
 );
@@ -354,6 +356,7 @@ const orientationLabel = $derived(
 const notices = $derived(
   buildStatusNotices({
     streamError,
+    connecting: connectionPhase === 'connecting',
     connectionDown,
     dataStalled,
     connectionLabel,
@@ -414,8 +417,10 @@ const notices = $derived(
   </span>
 {/snippet}
 
+<!-- Live chrome: menus opened anywhere leave it uncovered and close on a tap here (AnchoredMenu). -->
 <footer
   class="status-strip"
+  data-live-chrome
   class:editing
   bind:this={footer}
   use:observeClientHeight={() => onBarHeight(footer?.offsetHeight ?? 0)}

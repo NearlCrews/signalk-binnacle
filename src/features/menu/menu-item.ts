@@ -43,6 +43,9 @@ export interface MenuItem {
   // rather than a bare "3 active". Pluralized with a trailing "s" when the count is not 1. Only
   // meaningful alongside `count`.
   countNoun?: string;
+  // The state the spoken count names, "active" when unset: a waiting profile update is not an
+  // active one ("1 waiting profile update").
+  countState?: string;
   onSelect: () => void;
 }
 
@@ -72,8 +75,9 @@ export function countSuffix(item: MenuItem): string | undefined {
   if (countBadge(item) === undefined || item.count === undefined) return undefined;
   const count = Math.floor(item.count);
   const noun = item.countNoun?.trim();
-  if (!noun) return `, ${count} active`;
-  return `, ${count} active ${count === 1 ? noun : `${noun}s`}`;
+  const state = item.countState?.trim() || 'active';
+  if (!noun) return `, ${count} ${state}`;
+  return `, ${count} ${state} ${count === 1 ? noun : `${noun}s`}`;
 }
 
 // The reason a blocked item is grayed, for its hover tooltip and screen-reader text: the provider-absent

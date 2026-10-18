@@ -31,7 +31,8 @@ type NoticeTone = 'alarm' | 'warning' | 'info';
 const TONE_RANK: Record<NoticeTone, number> = { alarm: 0, warning: 1, info: 2 };
 
 type NoticeAction =
-  | { kind: 'button'; label: string; run: () => void }
+  // `opens` marks a door to a panel, which takes the screen, so the list closes behind it.
+  | { kind: 'button'; label: string; run: () => void; opens?: boolean }
   | { kind: 'link'; label: string; href: string };
 
 export interface StatusNotice {
@@ -60,6 +61,8 @@ export function sortNotices(notices: readonly StatusNotice[]): StatusNotice[] {
 
 export interface StatusNoticeInput {
   streamError: boolean;
+  // The first connection is still being made: no data yet, though nothing has failed.
+  connecting: boolean;
   connectionDown: boolean;
   dataStalled: boolean;
   // The short connection label and its fuller diagnosis.
@@ -105,6 +108,10 @@ function button(label: string, run: (() => void) | undefined): NoticeAction | un
   return run ? { kind: 'button', label, run } : undefined;
 }
 
+function door(label: string, run: (() => void) | undefined): NoticeAction | undefined {
+  return run ? { kind: 'button', label, run, opens: true } : undefined;
+}
+
 function plural(count: number, noun: string): string {
   return `${count} ${count === 1 ? noun : `${noun}s`}`;
 }
@@ -134,6 +141,17 @@ export function buildStatusNotices(input: StatusNoticeInput): StatusNotice[] {
       title: input.connectionLabel,
       detail: input.connectionTitle,
       action: button('Reconnect', input.onReconnect),
+    });
+  } else if (input.connecting) {
+    // Never All clear before any data has arrived; news rather than a caution, since nothing has
+    // failed yet.
+    add({
+      id: 'link',
+      tone: 'info',
+      icon: 'info',
+      word: 'No link',
+      title: input.connectionLabel,
+      detail: input.connectionTitle,
     });
   }
   if (!input.online) {
@@ -209,7 +227,7 @@ export function buildStatusNotices(input: StatusNoticeInput): StatusNotice[] {
       title: 'Waiting for GPS',
       detail:
         "Connected, but the server has not published a GPS position. Check the GPS source in the Signal K server's Data Browser, or open Help.",
-      action: button('Help', input.onOpenHelp),
+      action: door('Help', input.onOpenHelp),
       live: true,
     });
   }
@@ -233,7 +251,7 @@ export function buildStatusNotices(input: StatusNoticeInput): StatusNotice[] {
       word: alerts,
       title: alerts,
       detail: 'Raised by the Signal K server below the alarm level.',
-      action: button('Open Alarms', input.onOpenAlarms),
+      action: door('Open Alarms', input.onOpenAlarms),
     });
   }
   if (input.lookoutOpen && input.aisUnassessed > 0) {
@@ -244,7 +262,7 @@ export function buildStatusNotices(input: StatusNoticeInput): StatusNotice[] {
       word: 'AIS gaps',
       title: `${plural(input.aisUnassessed, 'AIS target')} unassessed`,
       detail: input.aisTitle,
-      action: button('Open AIS', input.onOpenAis),
+      action: door('Open AIS', input.onOpenAis),
       subordinate: input.linkDown,
     });
   }
@@ -257,7 +275,7 @@ export function buildStatusNotices(input: StatusNoticeInput): StatusNotice[] {
       word: warning.length <= WEATHER_WORD_MAX ? warning : 'Weather',
       title: `Weather warning: ${warning}`,
       detail: 'Issued by a weather provider for this position.',
-      action: button('Open forecast', input.onOpenWeather),
+      action: door('Open forecast', input.onOpenWeather),
     });
   }
   if (input.radarHealth.state !== 'quiet') {
@@ -275,7 +293,7 @@ export function buildStatusNotices(input: StatusNoticeInput): StatusNotice[] {
           ? 'Radar is transmitting but the echo display failed on this device.'
           : 'Radar is transmitting but its data stream failed.'
         : 'Radar is transmitting but no fresh echo frames are arriving.',
-      action: button('Open radar', input.onOpenRadar),
+      action: door('Open radar', input.onOpenRadar),
       live: true,
     });
   }
@@ -304,7 +322,7 @@ export function buildStatusNotices(input: StatusNoticeInput): StatusNotice[] {
           ? { kind: 'link', label: 'Sign in', href: accessUrl }
           : state === 'access-error'
             ? button('Retry', input.onRetryChartLocker)
-            : button('Open offline charts', input.onOpenOfflineCharts),
+            : door('Open offline charts', input.onOpenOfflineCharts),
       });
     }
   }

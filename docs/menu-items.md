@@ -432,7 +432,7 @@ source, and surrounding traffic before relying on it.
   changed through their **Reorder** menu's **Move up** and **Move down** actions, and moves count
   slots on the bar as shown. Moves preserve focus and announce the new position; Reset requires
   confirmation. The actions are equal tiles, an icon over its label, centered as a pair, and while
-  the bar has a column for each they take one bar column each, centered between the ends. When the
+  the bar has a column for each they take one bar column each, centered between the ends as closely as whole columns allow. When the
   bar cannot fit its actions, **More** exposes the overflow; the helm row holds four tiles.
 - The readouts are one grid of equal columns. Every readout is a cell with a caps label over its
   value, every value is one size on one shared baseline, and the position takes two columns. The

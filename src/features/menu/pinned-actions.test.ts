@@ -188,11 +188,33 @@ describe('retired pins', () => {
     expect(cleanPinned(['center', 'ais'])).toEqual(['center', 'ais']);
   });
 
+  it('brings a former default set nobody customized up to its successor', () => {
+    expect(cleanPinned(['menu', 'center', 'follow', 'ais'])).toEqual([...DEFAULT_PINNED]);
+    expect(cleanPinned(['menu', 'center', 'ais', 'radar'])).toEqual([
+      'center',
+      'ais',
+      'radar',
+      'night',
+    ]);
+    expect(cleanPinned(['menu', 'anchor', 'tides', 'instruments'])).toEqual([
+      'anchor',
+      'tides',
+      'instruments',
+      'layers',
+    ]);
+    // A customized list that merely contains the menu only loses it.
+    expect(cleanPinned(['menu', 'follow', 'center', 'ais'])).toEqual(['follow', 'center', 'ais']);
+  });
+
   it('rewrites a stored list that still pins the menu, and never writes one', () => {
     const codec = pinnedIdsCodec();
+    expect(codec.decode(['menu', 'follow', 'center', 'ais'])).toEqual({
+      state: 'migrated',
+      value: ['follow', 'center', 'ais'],
+    });
     expect(codec.decode(['menu', 'center', 'follow', 'ais'])).toEqual({
       state: 'migrated',
-      value: ['center', 'follow', 'ais'],
+      value: [...DEFAULT_PINNED],
     });
     expect(codec.decode(['center', 'follow'])).toEqual({
       state: 'valid',

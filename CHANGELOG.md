@@ -16,18 +16,19 @@ All notable changes to Binnacle are documented here. The format follows
 - Fold the top bar into the status bar, so the chart reaches the top of the screen: on a 1400 by
   700 tablet the chart grows from 71% of the screen to about 85%. The menu and MOB stand at the
   bar's two ends, full height on every screen, and MOB is the second keyboard stop. The menu, its
-  phone sheet, and every list the bar opens appear above the bar and never cover it; a tap on the
-  bar while one is open closes it and acts in the same tap.
+  phone sheet, every list the bar opens, the Forecast panel, and the sunset offer stand above the
+  bar and never cover it; a tap on the bar while a menu is open closes it and acts in the same
+  tap.
 - Report every problem that is not one readout's own in one fixed Status cell instead of a caution
   line above the readouts: the worst problem in a short word, in red or amber, with a count of
-  the rest, and All clear with the connection dot when calm. A tap opens the full list with each
+  the rest, and All clear with the connection dot only once data is flowing. A tap opens the full list with each
   problem's explanation and action. A paused shallow watch and unassessed AIS targets now count
   there too, and live problems are announced once each as they appear.
 - Move the Chart Locker, profile, update, and collision mute chips out of the top bar: Offline
   charts and Profiles show their state on their menu tiles, and the update and mute report in the
   Status cell.
-- Center the icon and label on the bar's tiles, and lay the tiles on whole bar columns, centered
-  between the ends.
+- Center the icon and label on the bar's tiles, and lay the tiles on whole bar columns between the
+  ends.
 - When the readouts do not fit, give way whole in a fixed order: the time, then the position, then
   AIS and one of COG and HDG.
 - Keep the installed desktop app's own title bar, now that no top bar holds the window controls.

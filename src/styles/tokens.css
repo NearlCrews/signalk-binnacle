@@ -60,8 +60,20 @@
   --z-menu: 5;
 
   /* The Forecast panel's height, defined once because two rules compose from it: the panel's own
-     block-size, and the lifted bottom-stack that clears the panel while it is open. */
-  --weather-panel-height: min(calc(74 * var(--dvh)), 36rem);
+     block-size, and the lifted bottom-stack that clears the panel while it is open. Capped to the
+     room above the status bar, which the shell publishes on this root. */
+  --weather-panel-height: min(
+    calc(74 * var(--dvh)),
+    36rem,
+    calc(
+      100 *
+      var(--dvh) -
+      var(--bar-block-size, 0px) -
+      var(--chrome-inset-top) -
+      2 *
+      var(--space-2)
+    )
+  );
   /* The touch target for action controls (buttons, the strip pills, icon buttons). List rows read
      denser through tighter padding and type, not through a smaller target: see --row-size below. */
   --control-size: 2.75rem;

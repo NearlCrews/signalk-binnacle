@@ -151,6 +151,30 @@ describe('StatusCell list', () => {
     expect(document.activeElement).toBe(cell);
   });
 
+  it('closes behind an action that opens a panel, and stays open on one that fixes in place', async () => {
+    const openForecast = vi.fn();
+    const enable = vi.fn();
+    const { cell } = setup([
+      notice({
+        id: 'sound',
+        action: { kind: 'button', label: 'Enable', run: enable },
+      }),
+      notice({
+        id: 'weather',
+        action: { kind: 'button', label: 'Open forecast', run: openForecast, opens: true },
+      }),
+    ]);
+    const surface = await openList(cell);
+    surface.querySelector<HTMLButtonElement>('[aria-describedby="status-row-sound"]')?.click();
+    flushSync();
+    expect(enable).toHaveBeenCalledOnce();
+    expect(list()).not.toBeNull();
+    surface.querySelector<HTMLButtonElement>('[aria-describedby="status-row-weather"]')?.click();
+    flushSync();
+    expect(openForecast).toHaveBeenCalledOnce();
+    await expect.poll(list).toBeNull();
+  });
+
   it('gets out of the way of a safety alarm', async () => {
     const { props, cell } = setup([notice({ id: 'offline', tone: 'alarm' })]);
     await openList(cell);
@@ -198,6 +222,12 @@ describe('StatusCell announcements', () => {
       await tick();
       await tick();
       expect(said).toEqual(['No GPS fix', 'No GPS fix']);
+      // Same id, new words (radar going from stale to failed): announced as the escalation it is.
+      props.notices = [offline, { ...fix, title: 'Waiting for GPS' }];
+      flushSync();
+      await tick();
+      await tick();
+      expect(said).toEqual(['No GPS fix', 'No GPS fix', 'Waiting for GPS']);
     } finally {
       observer.disconnect();
     }

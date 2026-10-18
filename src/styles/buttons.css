@@ -31,8 +31,8 @@
 }
 /* A button whose words swap (an armed confirm: Raise anchor, then Confirm raise?, rendered by the
    shared ArmedButton) reserves the width of its other label, named in data-reserve, so arming
-   changes only the words and never moves the button or its neighbors. The label sits in its own span; the reserve is hidden generated content,
-   out of the text and the accessible name. */
+   changes only the words and never moves the button or its neighbors. The label sits in its own
+   span; the reserve is hidden generated content, out of the text and the accessible name. */
 /* Compound with .btn so it outranks the .btn base's flex display, which this module declares later. */
 .btn.label-reserve {
   display: inline-grid;

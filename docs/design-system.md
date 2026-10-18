@@ -374,12 +374,15 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   the physical 44 px floor (`--target-floor`) on a narrow bar or a sideways phone, where the label
   stays for assistive tech. The source order is menu, MOB, readouts, tiles, so MOB is the second
   focus stop at every size (`reading-order` keeps it there on the helm row). The bar measures its own
-  height into `--bar-block-size` on the shell, which surfaces opened from it use to stay above it.
+  height into `--bar-block-size` on the document root (zero while the phone instrument dock covers
+  the whole screen), which every fixed surface uses to stay above the bar: the menu sheet, the
+  Forecast panel and the strips lifted over it, the sunset offer, and every menu's backdrop.
   Four layouts:
   - Stacked by default: the ends take the first and last column the full height of the bar, the
     readouts flow through the columns between them as a subgrid (so every cell edge is a bar column
     edge) at least `--data-cell-min` wide (5.75rem at 900 px and below), and the pinned tiles sit on
-    their own row beneath, one tile per bar column and centered between the ends while the bar has a
+    their own row beneath, one tile per bar column and centered between the ends (as closely as whole
+    columns allow; an odd leftover leans toward the start) while the bar has a
     column for each (`tiles-on-columns`), sharing the width otherwise.
   - Slim ends while the bar holds fewer than six of its own columns (two ends and four readouts,
     measured in the bar's column module so it follows the text size), and on every sideways phone.
@@ -1026,10 +1029,11 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   return to north up, and a fallback's reason and its Use north up are in the Status list. Adding a
   second target to those would crowd the bar without telling the navigator anything new.
 - The status bar is never covered by a surface it opens. The menu's phone sheet rests on the bar's
-  top edge, `AnchoredMenu`'s backdrop stops there (`--bar-block-size`), and a tap on a bar control
-  while a menu is open closes that menu and acts in the same tap, so MOB is always one tap away. A
-  full-screen modal that covers the bar (the phone instrument dock, Data trends) carries its own MOB
-  through `emergencyAction`.
+  top edge, `AnchoredMenu`'s backdrop stops there (`--bar-block-size`), and a tap on live chrome (an
+  element marked `data-live-chrome`, which the bar is) closes the open menu and acts in the same tap,
+  so MOB is always one tap away. The phone instrument dock, a full-screen modal over the bar, zeroes
+  the published height and carries its own MOB through `emergencyAction`, as Data trends does on a
+  phone, where its modal sheet hides the bar from assistive tech.
 - Destructive actions and derived-guidance navigation handoffs arm with `InlineConfirm`. They do not
   fire on a single tap.
 - Escape peels the topmost surface via the shared dismiss stack (`registerDismiss`), in last-opened

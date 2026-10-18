@@ -10,6 +10,7 @@ import {
 function calm(overrides: Partial<StatusNoticeInput> = {}): StatusNoticeInput {
   return {
     streamError: false,
+    connecting: false,
     connectionDown: false,
     dataStalled: false,
     connectionLabel: 'Connected',
@@ -68,6 +69,15 @@ describe('buildStatusNotices', () => {
     expect(actionLabel(down)).toBe('Reconnect');
     const stalled = only({ dataStalled: true, connectionLabel: 'Connected, no data' });
     expect(stalled).toMatchObject({ word: 'No data', title: 'Connected, no data' });
+  });
+
+  it('never reads calm while the first connection is still being made', () => {
+    expect(only({ connecting: true, connectionLabel: 'Connecting' })).toMatchObject({
+      id: 'link',
+      tone: 'info',
+      word: 'No link',
+      title: 'Connecting',
+    });
   });
 
   it('says offline in red and announces it', () => {
@@ -207,6 +217,26 @@ describe('buildStatusNotices', () => {
       tone: 'info',
       action: { label: 'Reload' },
     });
+  });
+
+  it('marks the panel doors, so the list closes behind them, and not the fixes in place', () => {
+    const notices = buildStatusNotices(
+      calm({
+        alertCount: 1,
+        onOpenAlarms: () => {},
+        soundOff: 'blocked',
+        onEnableSound: () => {},
+        weatherWarning: 'Gale',
+        onOpenWeather: () => {},
+      }),
+    );
+    const opens = Object.fromEntries(
+      notices.map((notice) => [
+        notice.id,
+        notice.action?.kind === 'button' ? notice.action.opens === true : undefined,
+      ]),
+    );
+    expect(opens).toEqual({ sound: false, alerts: true, weather: true });
   });
 
   it('puts red before amber before news, then the fixed order', () => {

@@ -319,7 +319,14 @@ $effect(() => {
   --menu-width: 12rem;
   transform-origin: right var(--anchored-origin-y, bottom);
   gap: var(--space-1);
-  max-block-size: calc(100 * var(--dvh) - 1rem);
+  /* Above the bar it opens from, never over it: the room between the top inset and the bar. */
+  max-block-size: calc(
+    100 *
+    var(--dvh) -
+    var(--bar-block-size, 0px) -
+    var(--chrome-inset-top) -
+    1rem
+  );
   overflow-y: auto;
 }
 /* One strip row on a phone held sideways: the icon tiles sit at the trailing edge at their own

@@ -593,9 +593,9 @@ const openInstalledCharts = (): void => openPanel('charts-management');
 const backToOfflineCharts = (): void => openPanel('regions');
 // NARROW_QUERY and COMPACT_QUERY in $shared/lib are the source of truth for the phone and compact
 // breakpoints. A media query cannot reference them, so their 600px and 900px literals are mirrored
-// in the `@media` blocks of styles/panels.css, the scoped styles of ChartLockerStatus, WeatherMap,
-// AppMenu, WeatherConditions, StatusStrip, PinnedActions, and the scoped CSS below; retune all of
-// them together.
+// in the `@media` blocks of styles/panels.css, the scoped styles of WeatherMap, AppMenu,
+// WeatherConditions, StatusStrip, PinnedActions, and the scoped CSS below; retune all of them
+// together.
 // On a phone the note detail and a leading panel both collapse to bottom sheets and would overlap,
 // so at narrow widths opening one closes the other. On a wide screen they dock to opposite edges and
 // coexist, so this exclusion only applies while the phone query matches.
@@ -1705,9 +1705,25 @@ $effect(() => {
   if (untrack(() => instruments.open)) untrack(() => instruments.setOpen(false));
 });
 // The menu opens above the status bar, where the safety rail rises: an alarm closes it rather than
-// let it cover the alarm's card. The Status list and the bar's More menu close the same way.
+// let it cover the alarm's card, and customizing ends with it, so the next open is the plain menu
+// the navigator needs mid-alarm. The Status list and the bar's More menu close the same way.
 $effect(() => {
-  if (emergencySafetyActive) untrack(() => (menuOpen = false));
+  if (!emergencySafetyActive) return;
+  untrack(() => {
+    menuOpen = false;
+    menuEditing = false;
+  });
+});
+
+// The bar's height, published on the document root so every fixed surface (a menu sheet, the
+// Forecast panel, the sunset offer, a menu backdrop) stops at the bar's top edge. Zero while the
+// phone instrument dock covers the whole screen, bar included, so a menu inside the dock gets a
+// full-screen backdrop again.
+$effect(() => {
+  const root = document.documentElement;
+  const covered = instruments.open && instrumentsFullScreen;
+  root.style.setProperty('--bar-block-size', `${covered ? 0 : barBlockSize}px`);
+  return () => root.style.removeProperty('--bar-block-size');
 });
 
 // The region-aware chart offer: in US waters the app already holds everything needed to turn a
@@ -2052,15 +2068,11 @@ const menuItems = $derived<MenuItem[]>([
     unavailableHint: marineRadar.store.unavailableHint,
     pressed: radarControlsOpen,
     onSelect: () => {
-      radarOpenedFrom = 'menu';
       // The echo reveals on first radar discovery and when transmit is keyed up, so opening the
       // panel must not force the layer back on: that would override an explicit toggle-off.
-      if (radarControlsOpen && radarDraftDirty) {
-        radarPanelRequest = 'close';
-      } else {
-        if (!radarControlsOpen && instrumentsFullScreen) instruments.setOpen(false);
-        radarControlsOpen = !radarControlsOpen;
-      }
+      if (!radarControlsOpen) openRadarControls();
+      else if (radarDraftDirty) radarPanelRequest = 'close';
+      else radarControlsOpen = false;
     },
   },
   {
@@ -2106,8 +2118,8 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Weather',
     pressed: weatherPanelOpen,
     onSelect: () => {
-      if (!weatherPanelOpen && instrumentsFullScreen) instruments.setOpen(false);
-      weatherPanelOpen = !weatherPanelOpen;
+      if (weatherPanelOpen) weatherPanelOpen = false;
+      else openForecast();
     },
   },
   {
@@ -2214,6 +2226,7 @@ const menuItems = $derived<MenuItem[]>([
       : 'Units, sync, and privacy',
     count: profileStore.remoteUpdateAvailable ? 1 : 0,
     countNoun: 'profile update',
+    countState: 'waiting',
     icon: UserCog,
     group: 'Settings',
     pressed: activePanel === 'profiles',
@@ -3142,11 +3155,7 @@ const plotterActions = {
 
 <!-- The measured safety-rail clearance rides the shell root so App-level overlays the rail can
      float over (the full-screen instrument dock) inherit it; 0px while no alerts are up. -->
-<main
-  class="binnacle-shell"
-  style:--rail-clearance={safetyRailClearance}
-  style:--bar-block-size={`${barBlockSize}px`}
->
+<main class="binnacle-shell" style:--rail-clearance={safetyRailClearance}>
   <LiveRegions
     safety={safetyAnnunciator.assertive}
     safetyQueue={safetyAnnunciator.polite}

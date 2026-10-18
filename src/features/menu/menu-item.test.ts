@@ -111,4 +111,10 @@ describe('countSuffix', () => {
     expect(countSuffix(item({ count: 2 }))).toBe(', 2 active');
     expect(countSuffix(item({ count: 2, countNoun: '  ' }))).toBe(', 2 active');
   });
+
+  it('names a state other than active when the item says so', () => {
+    expect(
+      countSuffix(item({ count: 1, countNoun: 'profile update', countState: 'waiting' })),
+    ).toBe(', 1 waiting profile update');
+  });
 });

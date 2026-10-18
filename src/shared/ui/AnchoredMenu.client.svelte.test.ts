@@ -140,7 +140,7 @@ describe('anchored menu over the status bar', () => {
   // A status bar with a control on it, and a menu opened from the bar's opener group.
   function barSetup() {
     const bar = document.createElement('footer');
-    bar.className = 'status-strip';
+    bar.dataset.liveChrome = '';
     bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:60px;';
     const control = document.createElement('button');
     control.textContent = 'MOB';

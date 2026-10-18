@@ -34,7 +34,8 @@ const { controller }: Props = $props();
 .sunset-host {
   container: banner / inline-size;
   position: fixed;
-  inset-block-end: calc(var(--space-6) + var(--system-bar-clearance, 0px));
+  /* Above the status bar, never over it: the bar holds MOB. */
+  inset-block-end: calc(var(--bar-block-size, 0px) + var(--space-3));
   inset-inline: var(--chrome-inset-start) var(--chrome-inset-end);
   display: flex;
   justify-content: center;

@@ -2449,6 +2449,17 @@ $effect(() => {
     var(--auth-banner-height, 0px)
   );
   inset-inline: 0;
+  /* The chart clips what floats on it, so a stack that outgrows the room below the access banner
+     (very large text on a short screen) scrolls to its buttons instead of losing them. */
+  max-block-size: calc(
+    100% -
+    var(--chrome-inset-top) -
+    2 *
+    var(--space-3) -
+    var(--auth-banner-height, 0px)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2509,7 +2520,8 @@ $effect(() => {
   overflow-y: auto;
 }
 .bottom-stack.above-weather {
-  inset-block-end: calc(var(--control-size) + 2 * var(--space-2) + var(--weather-panel-height));
+  /* The chart's bottom edge is the bar's top edge, where the Forecast panel stands. */
+  inset-block-end: calc(var(--weather-panel-height) + 2 * var(--space-2));
 }
 @media (max-width: 600px) {
   .bottom-stack {

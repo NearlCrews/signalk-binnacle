@@ -38,8 +38,8 @@ function baseProps() {
 }
 
 // Rendered to an SSR HTML string (the suite runs in the node environment, no DOM), enough to pin
-// the Depth readout's alarm styling on and off, matching ChartLockerStatus's own SSR-string
-// verification pattern for a presentational strip component.
+// the readouts' styling and the Status cell's words, the SSR-string verification pattern the
+// presentational strip components share.
 function body(props: ComponentProps<typeof StatusStrip>): string {
   return render(StatusStrip, { props }).body;
 }

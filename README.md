@@ -14,7 +14,7 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-![The Binnacle chart in the day theme, centered on Boston Harbor, with the MOB button and theme control in the top bar and the live status strip along the bottom](https://raw.githubusercontent.com/NearlCrews/signalk-binnacle/main/static/screenshots/01-chart.png)
+![The Binnacle chart in the day theme in San Francisco Bay, with two AIS targets, and the status bar along the bottom: the menu at its left end, live readouts and pinned tiles, and the MOB key at its right end](https://raw.githubusercontent.com/NearlCrews/signalk-binnacle/main/static/screenshots/01-chart.png)
 
 ## What's new in 0.24.0
 
