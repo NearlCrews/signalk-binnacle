@@ -156,10 +156,11 @@ function savedDataDetail(provisioned: boolean | undefined): string {
   align-items: start;
   gap: var(--space-2);
 }
+/* The body stretches its children, so a row's lone action fills its row like every lone action. */
 .check-row .body {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  align-items: start;
   gap: var(--space-1);
   min-inline-size: 0;
 }

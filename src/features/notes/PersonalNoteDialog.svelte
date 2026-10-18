@@ -206,7 +206,6 @@ function chooseCategory(event: Event): void {
 .note-block {
   display: grid;
   gap: var(--space-2);
-  justify-items: start;
 }
 .note-text {
   min-block-size: calc(3 * var(--control-size));
