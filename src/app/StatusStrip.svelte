@@ -12,7 +12,7 @@ import {
 } from '$entities/vessel';
 import { AutopilotChip } from '$features/autopilot';
 import { type MenuItem, PinnedActions } from '$features/menu';
-import { type AlarmAudioState, alarmAudioNote } from '$shared/audio';
+import { type AlarmAudioState, alarmAudioNote, primeAlarmAudio } from '$shared/audio';
 import {
   createMediaQuery,
   formatBearingOr,
@@ -113,9 +113,10 @@ let {
   // blocked gate clears on it and the notice leaves once the gate reads ready.
   soundOff?: AlarmAudioState;
   // The chart orientation while a rotating mode is chosen: what the chart is doing (shown), the
-  // reference driving it, and the full label naming any fallback to north. One tap on the cell
-  // returns to north up. Absent in the default north-up mode, where an unrotated chart speaks for
-  // itself.
+  // reference driving it, and the full label naming any fallback to north. One tap on a rotating
+  // cell returns to north up; while the rotation has fallen back, the cell explains and the caution
+  // line carries Use north up. Absent in the default north-up mode, where an unrotated chart speaks
+  // for itself.
   orientation?: { label: string; active: boolean; shown: string; reference?: string };
   onResetOrientation?: () => void;
   pinnedActions: MenuItem[];
@@ -144,10 +145,22 @@ const linkDown = $derived(connectionDown || dataStalled || streamError);
 
 const connTitle = $derived(connectionTitle || connectionLabel);
 
-// The tap itself is the fix: App's global listener primes audio on any gesture, so Enable and Try
-// again need no handler of their own. A blocked gate clears on the tap and the notice leaves; a
-// failed device may not come back, so that tap also says why. Unsupported has no action at all,
-// only the explanation.
+// Enable and Try again prime audio themselves rather than leaning on App's first-gesture listeners,
+// which remove themselves once audio first runs: a context the browser suspends later (a
+// backgrounded tab, a phone call) would otherwise leave an Enable tap that does nothing. A blocked
+// gate clears on the tap and the notice leaves; a failed device may not come back, so that tap also
+// says why. Unsupported has no action at all, only the explanation.
+function retrySoundOff(): void {
+  primeAlarmAudio();
+  explainSoundOff();
+}
+// A fallen-back rotation is already showing north up and resumes on its own when its data returns,
+// so a tap on its caution-styled cell explains, like every other caution cell, rather than
+// discarding the chosen mode; choosing north up for good is the caution line's explicit action.
+function explainOrientation(): void {
+  if (orientation) chipNote.show(`${orientation.label}. ${ORIENTATION_RESUMES}`, CHIP_NOTE_MS);
+}
+const ORIENTATION_RESUMES = 'The chosen rotation resumes when its data returns.';
 function explainSoundOff(): void {
   const note = soundOff === undefined ? undefined : alarmAudioNote(soundOff);
   if (note) chipNote.show(note, CHIP_NOTE_MS);
@@ -399,7 +412,11 @@ const radarText = $derived(
       {#if orientation && !orientation.active}
         <!-- The Chart cell says north up in the caution voice; the full label names why the chosen
              rotation fell back. -->
-        {@render notice(orientation.label, { cls: 'orientation-notice' })}
+        {@render notice(orientation.label, {
+          cls: 'orientation-notice',
+          action: 'Use north up',
+          onAction: onResetOrientation,
+        })}
       {/if}
       {#if weatherWarning}
         {@render tapNotice(weatherWarning, () => chipNote.show(weatherTitle, CHIP_NOTE_MS), {
@@ -412,7 +429,7 @@ const radarText = $derived(
           title: alarmAudioNote(soundOff),
           mute: true,
           action: 'Enable',
-          onAction: () => {},
+          onAction: primeAlarmAudio,
         })}
       {:else if soundOff === 'failed'}
         {@render notice('Alarm sound failed', {
@@ -420,7 +437,7 @@ const radarText = $derived(
           title: alarmAudioNote(soundOff),
           mute: true,
           action: 'Try again',
-          onAction: explainSoundOff,
+          onAction: retrySoundOff,
         })}
       {:else if soundOff === 'unsupported'}
         {@render tapNotice('Alarm sound unavailable', explainSoundOff, {
@@ -541,14 +558,17 @@ const radarText = $derived(
         </span>
       </button>
       {#if orientation}
-        <!-- The cell is its own action: one tap returns the chart to north up. The shown mode is a
-             live region, so a fallback to north is announced as well as drawn. -->
+        <!-- A rotating cell is its own action: one tap returns the chart to north up. A fallen-back
+             cell explains instead. The full label, reason included, is a live region, so a
+             fallback is announced with its cause as well as drawn. -->
         <button
           type="button"
           class="data-cell orientation-readout slot-extra-1"
           class:data-cell--warning={!orientation.active}
-          title="Chart orientation: {orientation.label}. Tap to return to north up."
-          onclick={onResetOrientation}
+          title={orientation.active
+            ? `Chart orientation: ${orientation.label}. Tap to return to north up.`
+            : `Chart orientation: ${orientation.label}. ${ORIENTATION_RESUMES}`}
+          onclick={orientation.active ? onResetOrientation : explainOrientation}
         >
           <span class="data-cell-label">
             {#if !orientation.active}
@@ -557,8 +577,13 @@ const radarText = $derived(
             {orientationLabel}
           </span>
           <span class="data-cell-value">
-            <span class="word" role="status" aria-live="polite">{orientation.shown}</span>
-            <span class="visually-hidden">, return to north up</span>
+            <span class="word" aria-hidden="true">{orientation.shown}</span>
+            <span class="visually-hidden" role="status" aria-live="polite"
+              >{orientation.label}</span
+            >
+            {#if orientation.active}
+              <span class="visually-hidden">, return to north up</span>
+            {/if}
           </span>
         </button>
       {/if}
@@ -584,10 +609,13 @@ const radarText = $derived(
             {#if anchor.fixLost}
               <span class="word">No GPS</span>
             {:else}
+              <!-- The radius is the qualifier, so on a tight column it ellipsizes before the
+                   distance or its unit is cut. -->
               <b class="num">{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b>
-              <span>/</span>
-              <b class="num">{formatLengthOr(anchor.radiusMeters, units.mode, 0)}</b>
               <span>{lengthUnit(units.mode)}</span>
+              <span class="data-cell-qualifier"
+                >of {formatLengthOr(anchor.radiusMeters, units.mode, 0)}</span
+              >
             {/if}
           </span>
         </button>
@@ -718,7 +746,16 @@ button.notice {
 /* The connection dot: the healthy state spends no strip space on the word "Connected" (the label
    stays for assistive tech and the hover title); a drop turns the dot the caution color, and the
    caution line carries the visible label and its action. */
+/* The gutter is narrow, so the tap area reaches into the strip's edge padding and the first cell's
+   empty padding to clear the 24px target floor without moving a readout. */
+.conn::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline: -0.5rem -0.25rem;
+}
 .conn {
+  position: relative;
   grid-column: 1;
   grid-row: 2;
   align-self: start;

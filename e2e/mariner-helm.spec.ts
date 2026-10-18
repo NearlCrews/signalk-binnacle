@@ -629,8 +629,12 @@ test('orientation falls back to north on a stale reference and survives a manual
   await page.mouse.up();
   await expect(notice).toContainText('North up (true heading stale)');
 
-  // One tap on the Chart cell returns to north-up, and the cell retires with the mode.
+  // A tap on the fallen-back cell explains and keeps the chosen rotation; the caution line's Use north
+  // up returns to north up for good, and the cell retires with the mode.
   await chip.click();
+  await expect(page.getByText('The chosen rotation resumes when its data returns.')).toBeVisible();
+  await expect(chip).toBeVisible();
+  await notice.getByRole('button', { name: 'Use north up' }).click();
   await expect(chip).toHaveCount(0);
   await expect(notice).toHaveCount(0);
 });

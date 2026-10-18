@@ -2608,7 +2608,8 @@ function backFromPoiSearch(): void {
 // running. Keydown is included so keyboard-only operators get audible alarms too. Pointerup is
 // included because pointerdown carries user activation only for a mouse: on a touchscreen the
 // activation arrives on release, so a helm tablet's first tap would otherwise be rejected, which
-// matters because the strip's Enable is this tap: its button needs no handler of its own.
+// matters on a helm tablet's first boot. The strip's Enable primes on its own tap as well, since these
+// listeners are gone once audio first runs and a later suspension needs a fresh gesture.
 const primeAudio = () => {
   if (alarmAudioPrimed()) {
     removePrimeListeners();

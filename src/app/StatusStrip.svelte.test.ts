@@ -367,11 +367,16 @@ describe('StatusStrip bar grid', () => {
         active: false,
         shown: 'North up',
       },
+      onResetOrientation: () => {},
     });
     expect(openingTag(html, 'orientation-readout')).toContain('data-cell--warning');
     expect(html).toContain('North up<');
     expect(html).toContain('North up (too slow for course up)');
-    // The shown mode is a live region, so the fallback is announced as well as drawn.
-    expect(html).toMatch(/role="status" aria-live="polite">North up</);
+    // The full label is the live region, so the fallback is announced with its cause.
+    expect(html).toMatch(/role="status" aria-live="polite">North up \(too slow for course up\)</);
+    // A fallen-back cell explains rather than discarding the chosen rotation; north up for good is
+    // the caution line's explicit action.
+    expect(html).not.toContain(', return to north up');
+    expect(html).toContain('Use north up');
   });
 });
