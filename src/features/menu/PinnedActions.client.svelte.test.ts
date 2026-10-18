@@ -1,6 +1,12 @@
+import Crosshair from '@lucide/svelte/icons/crosshair';
+import Navigation from '@lucide/svelte/icons/navigation';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
+import A11Y_CSS from '../../styles/a11y.css?raw';
+import BUTTONS_CSS from '../../styles/buttons.css?raw';
+import DATA_CELLS_CSS from '../../styles/data-cells.css?raw';
+import TOKENS_CSS from '../../styles/tokens.css?raw';
 import PinnedActions from './PinnedActions.svelte';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -208,5 +214,48 @@ describe('pinned action availability and resize lifecycle', () => {
     expect(disconnect).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
     expect(frames.size).toBe(0);
+  });
+});
+
+describe('pinned tile alignment', () => {
+  it('centers the icon and label in a stacked tile', async () => {
+    const previousViewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(1400, 700);
+    const sheet = document.createElement('style');
+    sheet.textContent = `${TOKENS_CSS}\n${BUTTONS_CSS}\n${DATA_CELLS_CSS}\n${A11Y_CSS}`;
+    document.head.append(sheet);
+    const target = document.createElement('div');
+    target.style.cssText = 'display:grid;width:600px;';
+    document.body.append(target);
+    const actions = [
+      { id: 'center', label: 'Center', icon: Crosshair, onSelect: () => {} },
+      { id: 'follow', label: 'Follow', icon: Navigation, onSelect: () => {} },
+    ];
+    const component = mount(PinnedActions, { target, props: { actions } });
+    flushSync();
+    try {
+      await document.fonts.ready;
+      const tiles = [...target.querySelectorAll<HTMLElement>('.bar-tile')];
+      expect(tiles).toHaveLength(2);
+      for (const tile of tiles) {
+        const box = tile.getBoundingClientRect();
+        const icon = tile.querySelector('svg')?.getBoundingClientRect();
+        // The text's own box, not the label's line box: the line box is symmetric even while the
+        // glyphs ride high on a strut sized for the readout numerals.
+        const text = tile.querySelector('.tile-label .truncate')?.firstChild;
+        if (!icon || !text) throw new Error('tile is missing its icon or label');
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const label = range.getBoundingClientRect();
+        const gapAbove = icon.top - box.top;
+        const gapBelow = box.bottom - label.bottom;
+        expect(Math.abs(gapAbove - gapBelow), tile.textContent ?? '').toBeLessThanOrEqual(1);
+      }
+    } finally {
+      await unmount(component);
+      target.remove();
+      sheet.remove();
+      await page.viewport(previousViewport.width, previousViewport.height);
+    }
   });
 });

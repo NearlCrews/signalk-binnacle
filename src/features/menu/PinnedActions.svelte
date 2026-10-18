@@ -228,10 +228,10 @@ $effect(() => machine.syncOpen(moreOpen));
 </div>
 
 <style>
-/* The bar's actions are equal tiles, an icon over a one-line label on the status bar's two shared
-   line heights, so a tile's label sits on the readouts' value baseline. Tiles share the bar
-   equally, up to one bar column each. On the status strip's helm row each tile is exactly one bar
-   column: the host grants --bar-capacity and sets the column, gap, and inset. */
+/* The bar's actions are equal tiles, an icon over a one-line label, centered as a pair. Tiles share
+   the bar equally, up to one bar column each. A host that sets the tiles on one row with readouts
+   (the status strip's helm row) opts into the readouts' two line heights and value baseline through
+   the --bar-tile-* variables, and grants --bar-capacity with the column, gap, and inset. */
 .pinned-actions {
   position: relative;
   /* Fill the host's column whatever the host's own alignment, so capacity is measured against the
@@ -246,10 +246,10 @@ $effect(() => machine.syncOpen(moreOpen));
 }
 .bar-tile {
   display: grid;
-  grid-template-rows: var(--data-label-line) var(--data-value-line);
+  grid-template-rows: var(--bar-tile-rows, auto auto);
   align-content: center;
   justify-items: center;
-  gap: 0;
+  gap: var(--bar-tile-row-gap, var(--space-1)) 0;
   min-inline-size: 0;
   margin-inline: var(--bar-tile-inset, 0);
   padding: 0 0.2rem;
@@ -261,6 +261,12 @@ $effect(() => machine.syncOpen(moreOpen));
 }
 .tile-label {
   max-inline-size: 100%;
+  line-height: var(--bar-tile-label-line, 1);
+}
+/* The numeral strut only earns its place on a row shared with readouts; alone it leaves the large
+   font's descent empty under a small label and lifts the pair off center. */
+.tile-label::before {
+  display: var(--bar-tile-strut, none);
 }
 .tile-label > .truncate {
   min-inline-size: 0;

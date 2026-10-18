@@ -928,6 +928,11 @@ button.notice {
     --bar-tile-inset: var(--space-1);
     /* Fewer than four tiles start at the first tile column, so every tile edge stays on the grid. */
     --bar-tile-justify: start;
+    /* On a row shared with the readouts, a tile's label sits on their value baseline. */
+    --bar-tile-rows: var(--data-label-line) var(--data-value-line);
+    --bar-tile-row-gap: 0;
+    --bar-tile-label-line: var(--data-value-line);
+    --bar-tile-strut: inline;
   }
   .slot-extra-1 {
     grid-column: 11;
