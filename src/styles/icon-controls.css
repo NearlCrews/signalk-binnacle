@@ -60,7 +60,9 @@
 }
 
 /* A round chrome icon button on the raised surface with an accent icon, shared by the top-bar
-   controls (the menu trigger and the theme toggle) so they lift, hover, and press alike. */
+   controls (the menu trigger and the theme toggle) so they hover and press alike. On the bar it sits
+   flat beside the .btn-pill chips; one floating over the chart adds .icon-pill--float for the
+   overlay shadow the map controls carry. */
 .icon-pill {
   display: inline-flex;
   flex: none;
@@ -75,7 +77,6 @@
   background: var(--surface-raised);
   color: var(--accent);
   cursor: pointer;
-  box-shadow: var(--shadow-overlay);
   transition:
     border-color var(--transition-fast),
     background-color var(--transition-fast),
@@ -89,6 +90,9 @@
 }
 .icon-pill:active:not(:disabled) {
   filter: brightness(var(--brightness-press));
+}
+.icon-pill--float {
+  box-shadow: var(--shadow-overlay);
 }
 
 /* The lit "engaged" state shared by the chrome toggles (the Follow and Forecast strip pills, the

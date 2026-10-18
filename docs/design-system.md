@@ -111,7 +111,10 @@ condition, and one used there drops the whole block.
   landscape-edge chrome must also include the appropriate `safe-area-inset-*` value. A landscape
   phone is wider than the 600 px phone breakpoint, so it lays out with the wide rules: the top bar,
   the docked `.panel-slot`, and the instrument dock reserve the inline insets there too, not only in
-  the phone branch.
+  the phone branch. The chrome gutter tokens `--chrome-inset-start` and `--chrome-inset-end`
+  (`--space-3` plus that side's safe area) are the one inline edge for the top bar, the auth banner,
+  the top banners, the status badge, the MapLibre controls, the strip stack, and the safety rail, so
+  every one of them clears a notch on the same line.
 - `--tracking-caps` 0.06em for uppercase labels, `--disabled-opacity` 0.45, `--transition-fast`
   `120ms var(--ease-out)` for every hover and press, where `--ease-out` is
   `cubic-bezier(0.33, 1, 0.68, 1)`, the CSS form of Svelte's `cubicOut` that every surface
@@ -294,7 +297,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   count chip shared by the toolbar's collapsed More pill and a menu item's live count, rendered
   through the menu slice's `MenuItemCount`).
 - Icon controls (`icon-controls.css`): `.icon-btn` (square icon button), `.icon-btn--accent`,
-  `.icon-btn--danger`, `.icon-pill` (a pill-shaped icon toggle), the `.panel-close` and
+  `.icon-btn--danger`, `.icon-pill` (a pill-shaped icon toggle, flat on a bar beside the `.btn-pill`
+  chips, with `.icon-pill--float` adding the overlay shadow for one floating over the chart), the
+  `.panel-close` and
   `.panel-minimize` panel header controls, and the shared `.is-on` lit state (accent color, accent
   border, accent-tint fill) that lights any composing control.
 - Forms (`forms.css`): `.control-error` (a control's own validation message, the alarm-voiced

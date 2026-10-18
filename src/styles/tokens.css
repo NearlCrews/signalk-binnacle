@@ -71,6 +71,11 @@
      pointer fallback reserves one control target plus one spacing step (48px at the default root). */
   --system-bar-fallback: calc(var(--control-size) + var(--space-1));
   --system-bar-clearance: env(safe-area-inset-bottom, 0px);
+  /* The chrome gutter: the inline edge every bar and floating chart control keeps, the shared
+     --space-3 plus that side's safe area, so a landscape notch phone keeps the top bar, banners,
+     badges, map controls, and strips clear of the notch on one line. */
+  --chrome-inset-start: calc(var(--space-3) + env(safe-area-inset-left, 0px));
+  --chrome-inset-end: calc(var(--space-3) + env(safe-area-inset-right, 0px));
   /* WCAG 2.5.5 sets 44px as the touch-target minimum, so list rows meet the same floor as the
      primary controls even though they read visually denser; kept equal to --control-size rather
      than its own value so the two cannot drift apart. */

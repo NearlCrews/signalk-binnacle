@@ -534,7 +534,7 @@ onDestroy(() => {
          active count, so a glance answers "is anything on" without opening the menu. -->
     <button
       type="button"
-      class="icon-pill layer-trigger"
+      class="icon-pill icon-pill--float layer-trigger"
       class:is-on={layerMenuOpen || activeCount > 0}
       aria-haspopup="true"
       aria-expanded={layerMenuOpen}

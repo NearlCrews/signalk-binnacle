@@ -3586,23 +3586,16 @@ const plotterActions = {
   align-items: center;
   gap: var(--space-2);
 
-  /* One --space-1 above and below the 44px controls at every width. */
-  padding: var(--space-1) var(--space-4);
+  /* One --space-1 above and below the 44px controls at every width, and the chrome gutter at each
+     inline edge. */
+  padding-block: var(--space-1);
 
   /* Window Controls Overlay alignment. A landscape phone also lays out with these wide rules, so
      the inline edges reserve the notch side as well. */
   padding-block-start: max(var(--space-1), env(titlebar-area-y, 0px));
   min-block-size: max(var(--control-size), env(titlebar-area-height, 0px));
-  padding-inline-start: max(
-    calc(var(--space-4) + env(safe-area-inset-left, 0px)),
-    env(titlebar-area-x, 0px)
-  );
-  padding-inline-end: calc(
-    100% -
-    env(titlebar-area-width, 100%) +
-    var(--space-4) +
-    env(safe-area-inset-right, 0px)
-  );
+  padding-inline-start: max(var(--chrome-inset-start), env(titlebar-area-x, 0px));
+  padding-inline-end: calc(100% - env(titlebar-area-width, 100%) + var(--chrome-inset-end));
 
   border-block-end: 1px solid var(--border);
 
@@ -3639,10 +3632,6 @@ const plotterActions = {
 @media (max-width: 600px) {
   .topbar {
     gap: var(--space-1);
-    padding: var(--space-1) 0;
-    padding-block-start: max(var(--space-1), env(titlebar-area-y, 0px));
-    padding-inline-start: env(safe-area-inset-left, 0px);
-    padding-inline-end: env(safe-area-inset-right, 0px);
   }
   .topbar-actions {
     gap: var(--space-1);

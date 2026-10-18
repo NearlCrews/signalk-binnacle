@@ -309,10 +309,9 @@ function chipDescription(condition: ChipCondition): string {
   color: var(--warning);
   border-color: var(--warning);
 }
-/* Acknowledged conditions step down by a dashed border and plain weight, as an acknowledged strip
-   does, never by opacity. */
+/* Acknowledged conditions step down by a dashed border, as an acknowledged strip does, never by
+   opacity, and keep their weight so the chip and its neighbors keep their width. */
 .chip--acked {
   border-style: dashed;
-  font-weight: 400;
 }
 </style>

@@ -29,9 +29,16 @@ describe('installed PWA system-bar clearance', () => {
   // A landscape phone is wider than the 600px phone breakpoint, so it lays out with the wide rules.
   // Those must reserve the notch side too, or the menu button and panel headers sit under it.
   it('keeps the wide top bar, docked panels, and instrument dock clear of a landscape notch', () => {
+    // The top bar reaches the notch through the chrome gutter tokens, which carry the side insets.
     const topbar = APP.slice(APP.indexOf('.topbar {'), APP.indexOf('.topbar > *'));
-    expect(topbar).toContain('env(safe-area-inset-left, 0px)');
-    expect(topbar).toContain('env(safe-area-inset-right, 0px)');
+    expect(topbar).toContain('var(--chrome-inset-start)');
+    expect(topbar).toContain('var(--chrome-inset-end)');
+    expect(TOKENS_CSS).toContain(
+      '--chrome-inset-start: calc(var(--space-3) + env(safe-area-inset-left, 0px))',
+    );
+    expect(TOKENS_CSS).toContain(
+      '--chrome-inset-end: calc(var(--space-3) + env(safe-area-inset-right, 0px))',
+    );
     const slot = PANELS_CSS.slice(PANELS_CSS.indexOf('.panel-slot {'));
     expect(slot.slice(0, slot.indexOf('}'))).toContain(
       'inset-inline-start: env(safe-area-inset-left, 0px)',

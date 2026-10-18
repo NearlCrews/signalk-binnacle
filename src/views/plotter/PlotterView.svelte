@@ -2464,12 +2464,12 @@ $effect(() => {
    an edge-docked panel (22rem) clear at desktop widths. */
 .toast-banner.action-note {
   justify-content: center;
-  max-inline-size: min(32rem, calc(100% - var(--space-6)));
+  max-inline-size: min(32rem, calc(100% - var(--chrome-inset-start) - var(--chrome-inset-end)));
 }
 .toast-banner {
   pointer-events: auto;
   inline-size: fit-content;
-  max-inline-size: calc(100% - var(--space-6));
+  max-inline-size: calc(100% - var(--chrome-inset-start) - var(--chrome-inset-end));
   padding: var(--space-2) var(--space-4);
   box-shadow: var(--shadow-overlay);
 }
@@ -2479,8 +2479,11 @@ $effect(() => {
 .bottom-stack {
   position: absolute;
   inset-block-end: calc(var(--space-3) + var(--rail-clearance, 0px));
-  inset-inline: var(--space-3);
-  inline-size: min(calc(28rem + 2 * var(--space-3)), calc(100% - 2 * var(--space-3)));
+  inset-inline: var(--chrome-inset-start) var(--chrome-inset-end);
+  inline-size: min(
+    calc(28rem + 2 * var(--space-3)),
+    calc(100% - var(--chrome-inset-start) - var(--chrome-inset-end))
+  );
   margin-inline: auto;
   max-block-size: min(calc(60 * var(--dvh)), calc(100% - 2 * var(--space-3)));
   display: flex;
@@ -2533,15 +2536,10 @@ $effect(() => {
   container: safety-rail / inline-size;
   position: absolute;
   inset-block-end: var(--space-3);
-  inset-inline: calc(var(--space-3) + env(safe-area-inset-left, 0px))
-    calc(var(--space-3) + env(safe-area-inset-right, 0px));
-  inline-size: min(calc(28rem + 2 * var(--space-3)), calc(100% - 2 * var(--space-3)));
-  max-inline-size: calc(
-    100% -
-    2 *
-    var(--space-3) -
-    env(safe-area-inset-left, 0px) -
-    env(safe-area-inset-right, 0px)
+  inset-inline: var(--chrome-inset-start) var(--chrome-inset-end);
+  inline-size: min(
+    calc(28rem + 2 * var(--space-3)),
+    calc(100% - var(--chrome-inset-start) - var(--chrome-inset-end))
   );
   margin-inline: auto;
   max-block-size: calc(100% - 2 * var(--space-3));

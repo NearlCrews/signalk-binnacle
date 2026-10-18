@@ -98,6 +98,7 @@
 .maplibregl-ctrl-top-right .maplibregl-ctrl,
 .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
   margin: var(--space-3);
+  margin-inline-end: var(--chrome-inset-end);
 }
 /* MapLibre docks its controls to the trailing edge, which is exactly where the note detail panel
    docks, and both sit at the same stacking level, so the panel covered the zoom buttons, the scale

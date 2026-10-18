@@ -68,7 +68,7 @@ $effect(() => {
 {#if visible}
   <button
     type="button"
-    class="icon-pill off-screen-indicator"
+    class="icon-pill icon-pill--float off-screen-indicator"
     class:off-screen-indicator--stale={positionStale}
     style:left="{x}px"
     style:top="{y}px"
