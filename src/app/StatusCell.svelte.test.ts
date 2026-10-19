@@ -1,5 +1,6 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
+import { visibleText as text } from '$shared/testing';
 import StatusCell from './StatusCell.svelte';
 import type { StatusNotice } from './status-notices';
 
@@ -21,14 +22,6 @@ function body(notices: StatusNotice[]): string {
 function cell(html: string): string {
   const start = html.indexOf('<button');
   return html.slice(start, html.indexOf('</button>', start) + '</button>'.length);
-}
-
-function text(html: string): string {
-  return html
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 describe('StatusCell', () => {

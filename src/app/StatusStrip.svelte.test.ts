@@ -7,7 +7,7 @@ import { OwnVessel } from '$entities/vessel';
 import type { ReactiveClock } from '$shared/lib';
 import type { ConnectionPhase, SKFrame } from '$shared/signalk';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeStorage } from '$shared/testing';
+import { createFakeStorage, visibleText } from '$shared/testing';
 import StatusStrip from './StatusStrip.svelte';
 
 const clock: ReactiveClock = { now: Date.UTC(2026, 0, 1, 12, 0, 0) };
@@ -49,12 +49,7 @@ function statusCell(html: string): { text: string; tag: string } {
   const tag = openingTag(html, 'status-cell');
   const start = html.indexOf(tag);
   const inner = html.slice(start, html.indexOf('</button>', start));
-  const text = inner
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return { text, tag };
+  return { text: visibleText(inner), tag };
 }
 
 // The opening tag of the first element carrying a class, throwing when absent.
