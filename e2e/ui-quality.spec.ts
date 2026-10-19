@@ -805,6 +805,33 @@ test('the Status cell keeps its box when problems come and go', async ({ page, c
   await context.setOffline(false);
 });
 
+// A browser that focuses a pressed button moves focus onto it before the click, so a second tap on
+// the Status cell or the More tile has to close what it opened rather than close and reopen it.
+test('a second tap on the Status cell or the More tile closes what it opened', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 320 });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem(
+      'binnacle:pinned-actions',
+      JSON.stringify(['center', 'follow', 'routes', 'tracks', 'waypoints', 'measure', 'layers']),
+    );
+  });
+  await page.goto('/');
+  const cell = page.locator('.status-strip .status-cell');
+  const list = page.getByRole('dialog', { name: 'Status' });
+  await cell.click();
+  await expect(list).toBeVisible();
+  await cell.click();
+  await expect(list).toBeHidden();
+
+  const more = page.getByRole('button', { name: /More actions \(/ });
+  const menu = page.locator('.bar-more');
+  await more.click();
+  await expect(menu).toBeVisible();
+  await more.click();
+  await expect(menu).toBeHidden();
+});
+
 for (const [width, height] of [
   [390, 760],
   [1400, 700],

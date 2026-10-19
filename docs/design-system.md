@@ -1037,7 +1037,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   return to north up, and a fallback's reason and its Use north up are in the Status list. Adding a
   second target to those would crowd the bar without telling the navigator anything new.
 - The status bar is never covered by a surface it opens. The menu's phone sheet rests on the bar's
-  top edge, `AnchoredMenu`'s backdrop stops there (`--bar-block-size`), and a tap on live chrome (an
+  top edge, `AnchoredMenu`'s backdrop stops there (`--bar-block-size`, except inside a modal dialog,
+  where the bar is inert and the backdrop covers it), and a tap on live chrome (an
   element marked `data-live-chrome`, which the bar is) closes the open menu and acts in the same tap,
   so MOB is always one tap away. The phone instrument dock, a full-screen modal over the bar, zeroes
   the published height and carries its own MOB through `emergencyAction`, as Data trends does on a

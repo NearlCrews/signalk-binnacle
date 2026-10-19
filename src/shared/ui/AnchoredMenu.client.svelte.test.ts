@@ -138,7 +138,7 @@ describe('anchored menu placement callback', () => {
 
 describe('anchored menu over the status bar', () => {
   // A status bar with a control on it, and a menu opened from the bar's opener group.
-  function barSetup() {
+  function barSetup(props: { anchor?: HTMLElement; onFocusLeft?: () => void } = {}) {
     const bar = document.createElement('footer');
     bar.dataset.liveChrome = '';
     bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:60px;';
@@ -166,11 +166,13 @@ describe('anchored menu over the status bar', () => {
         onClose,
         backdropLabel: 'Close menu',
         children: createRawSnippet(() => ({ render: () => '<button>Action</button>' })),
+        ...props,
       },
     });
     flushSync();
     return {
       bar,
+      group,
       control,
       trigger,
       onClose,
@@ -210,6 +212,49 @@ describe('anchored menu over the status bar', () => {
     }
   });
 
+  it('closes once on a tap on its own backdrop inside the bar', async () => {
+    const test = barSetup();
+    try {
+      const backdrop = test.group.querySelector('.anchored-menu-backdrop');
+      if (!backdrop) throw new Error('no backdrop');
+      tap(backdrop);
+      expect(test.onClose).toHaveBeenCalledOnce();
+    } finally {
+      await test.destroy();
+    }
+  });
+
+  // A browser that focuses a pressed button moves focus to the trigger before its click. Treating
+  // that as leaving would close the menu, and the click would toggle it straight back open.
+  it('does not treat focus moving to its own trigger or anchor as leaving', async () => {
+    const anchor = document.createElement('button');
+    anchor.textContent = 'Status';
+    document.body.append(anchor);
+    const onFocusLeft = vi.fn();
+    const test = barSetup({ anchor, onFocusLeft });
+    const surface = test.group.querySelector<HTMLElement>('.anchored-menu-surface');
+    const action = surface?.querySelector('button');
+    if (!surface || !action) throw new Error('no action');
+    try {
+      // An anchored surface stays hidden, and so unfocusable, until it is placed.
+      await vi.waitFor(() => expect(getComputedStyle(surface).visibility).toBe('visible'));
+      for (const next of [test.trigger, anchor]) {
+        action.focus();
+        expect(document.activeElement).toBe(action);
+        next.focus();
+        await tick();
+        expect(onFocusLeft).not.toHaveBeenCalled();
+      }
+      action.focus();
+      test.control.focus();
+      await tick();
+      expect(onFocusLeft).toHaveBeenCalledOnce();
+    } finally {
+      anchor.remove();
+      await test.destroy();
+    }
+  });
+
   it('stops its backdrop at the bar, so the bar is never covered', async () => {
     const test = barSetup();
     try {
@@ -219,6 +264,32 @@ describe('anchored menu over the status bar', () => {
       expect(box.top).toBe(0);
       expect(box.bottom).toBeCloseTo(window.innerHeight - 60, 0);
     } finally {
+      await test.destroy();
+    }
+  });
+
+  it('covers the inert bar too when it opens inside a modal dialog', async () => {
+    const test = barSetup();
+    const dialog = document.createElement('dialog');
+    document.body.append(dialog);
+    dialog.showModal();
+    const component = mount(AnchoredMenu, {
+      target: dialog,
+      props: {
+        open: true,
+        onClose: () => {},
+        backdropLabel: 'Close picker',
+        children: createRawSnippet(() => ({ render: () => '<button>Pick</button>' })),
+      },
+    });
+    flushSync();
+    try {
+      const backdrop = dialog.querySelector('.anchored-menu-backdrop');
+      if (!backdrop) throw new Error('no backdrop');
+      expect(backdrop.getBoundingClientRect().bottom).toBeCloseTo(window.innerHeight, 0);
+    } finally {
+      await unmount(component);
+      dialog.remove();
       await test.destroy();
     }
   });

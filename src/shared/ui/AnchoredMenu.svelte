@@ -75,6 +75,7 @@ let {
   children,
 }: Props = $props();
 
+let backdrop = $state<HTMLButtonElement>();
 let destroyed = false;
 onDestroy(() => {
   destroyed = true;
@@ -95,7 +96,18 @@ async function handleFocusOut(event: FocusEvent): Promise<void> {
     return;
   }
   onFocusOut?.(event);
-  if (open && onFocusLeft && menuFocusLeft(event.relatedTarget, surfaceRef)) onFocusLeft();
+  // Focus moving to the menu's own trigger is not leaving: a browser that focuses a button on
+  // pointer-down would close the menu there, and the same tap's click would toggle it open again.
+  if (open && onFocusLeft && menuFocusLeft(event.relatedTarget, surfaceRef)) {
+    if (isOwnOpener(event.relatedTarget, surface)) return;
+    onFocusLeft();
+  }
+}
+
+function isOwnOpener(target: EventTarget | null, surface: Element | undefined): boolean {
+  if (!(target instanceof Node)) return false;
+  if (anchor?.contains(target)) return true;
+  return surface?.closest('[data-menu-opener-group]')?.contains(target) ?? false;
 }
 
 let automaticStyle = $state('position: fixed; visibility: hidden;');
@@ -177,15 +189,14 @@ $effect(() => {
 // tap there reaches the chrome's control instead of the backdrop, and that tap also closes the menu
 // without being swallowed, so MOB is one tap away whatever is open. Taps anywhere else still meet the
 // backdrop. The menu's own opener group (its trigger) and anchor are excluded, since their click
-// toggles it.
+// toggles it, and so is its own backdrop, whose click closes it once.
 $effect(() => {
   if (!open) return;
   const onPointerDown = (event: PointerEvent): void => {
     const target = event.target;
     if (!(target instanceof Element) || !target.closest('[data-live-chrome]')) return;
     const surface = surfaceRef;
-    if (surface?.contains(target) || anchor?.contains(target)) return;
-    if (surface?.closest('[data-menu-opener-group]')?.contains(target)) return;
+    if (target === backdrop || surface?.contains(target) || isOwnOpener(target, surface)) return;
     onClose();
   };
   document.addEventListener('pointerdown', onPointerDown, true);
@@ -210,6 +221,7 @@ $effect(() => {
     aria-label={backdropLabel}
     tabindex="-1"
     onclick={onClose}
+    bind:this={backdrop}
   ></button>
   <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is a prop (group by default, menu for
        context menus, dialog for a modal step); all support aria-label, and aria-modal is set only
@@ -249,9 +261,14 @@ $effect(() => {
 }
 /* Override the .overlay-backdrop base (position: absolute) with fixed so the backdrop covers the
    viewport regardless of the nearest positioned ancestor, down to the status bar's top edge. A tap
-   anywhere outside the surface closes the menu. */
+   anywhere outside the surface closes the menu. Inside a modal dialog the bar is inert, so the
+   backdrop covers it too, and a tap meant to close the menu cannot reach the dialog's own
+   buttons. */
 .anchored-menu-backdrop {
   position: fixed;
   inset-block-end: var(--bar-block-size, 0px);
+}
+:global(dialog) .anchored-menu-backdrop {
+  inset-block-end: 0;
 }
 </style>
