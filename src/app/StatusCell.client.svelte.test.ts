@@ -12,6 +12,13 @@ import TOKENS_CSS from '../styles/tokens.css?raw';
 import StatusCell from './StatusCell.svelte';
 import type { StatusNotice } from './status-notices';
 
+// The list arrives and leaves without motion, so a check that it closed never races its outro on a
+// loaded machine.
+vi.mock('$shared/lib', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$shared/lib')>()),
+  prefersReducedMotion: () => true,
+}));
+
 let sheet: HTMLStyleElement;
 beforeAll(async () => {
   sheet = document.createElement('style');
