@@ -6,6 +6,13 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0241"></a>
+
+## [0.24.1] - 2026-10-18
+
+One bar: the top bar folds into the status bar, so the chart reaches the top of the screen, and
+every problem that is not one readout's own reports in one Status cell instead of adding a row.
+
 ### Added
 
 - Add a Night mode menu item that goes straight to night-red, never through dusk, and returns to
@@ -32,6 +39,8 @@ All notable changes to Binnacle are documented here. The format follows
 - When the readouts do not fit, give way whole in a fixed order: the time, then the position, then
   AIS and one of COG and HDG.
 - Keep the installed desktop app's own title bar, now that no top bar holds the window controls.
+- Update MapLibre GL JS to 6.15, which keeps tiles loading in Safari 26.6 and later after the page
+  returns from the background, and Terra Draw to 1.38, along with current build tooling.
 
 ### Removed
 

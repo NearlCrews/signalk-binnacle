@@ -16,20 +16,19 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 
 ![The Binnacle chart in the day theme in San Francisco Bay, with two AIS targets, and the status bar along the bottom: the menu at its left end, live readouts and pinned tiles, and the MOB key at its right end](https://raw.githubusercontent.com/NearlCrews/signalk-binnacle/main/static/screenshots/01-chart.png)
 
-## What's new in 0.24.0
+## What's new in 0.24.1
 
-- **One layout standard:** repeated items are the same size, labels and values share lines across
-  a surface, and nothing squeezes, clips, or jumps when a state changes.
-- **A status strip on one grid:** equal data cells with every value on one baseline, the pinned
-  actions as equal tiles, and problems shown in their own cell or on one caution line.
-- **Steady strips and tiles:** every strip's readouts sit on the same columns, alarm actions keep
-  their slots, and instrument tiles line up their numerals across a row.
-- **Phones and large text:** top bar chips and banner actions give way as whole items instead of
-  overlapping MOB or running off the screen, and the chrome clears a phone's notch.
-- **Clearer notes:** offers and invitations read as information in the accent color (blue by day),
-  never in the alarm color.
+- **One bar:** the top bar folds into the status bar, so the chart reaches the top of the screen.
+  The menu and MOB stand at the bar's two ends, full height on every screen, and nothing the bar
+  opens covers it.
+- **One Status cell:** every problem that is not one readout's own shows there as a short word in
+  red or amber with a count of the rest, and a tap opens the full list with each problem's action.
+- **Night mode in one tap:** a menu item, which can be pinned to the bar, goes straight to night-red
+  and back to the lighter theme last in use.
+- **Large text that holds:** readouts grow with enlarged text and stay whole on a phone, giving way
+  one cell at a time instead of clipping.
 
-See the [0.24.0 changelog](https://github.com/NearlCrews/signalk-binnacle/blob/main/CHANGELOG.md#v0240)
+See the [0.24.1 changelog](https://github.com/NearlCrews/signalk-binnacle/blob/main/CHANGELOG.md#v0241)
 for the full list.
 
 ## What it does
