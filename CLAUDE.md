@@ -399,8 +399,8 @@ root. App and PlotterView own the explicit construction and wiring between those
   markup or CSS appears in a second place, hoist it; a third copy is a review failure.
 - Reuse the shared non-UI helpers before re-implementing them: `$shared/lib` (NARROW_QUERY,
   COMPACT_QUERY, and LANDSCAPE_SHORT_QUERY, the named layout questions script must ask instead of a
-  breakpoint literal, with createMediaQuery sharing one list and listener per query, isRecord, formatPercent,
-  formatFixed, formatBytes and the unit formatters including lengthUnit, formatMonthDay, and the SI
+  breakpoint literal, with createMediaQuery sharing one list and listener per query, rootFontPx for
+  what one measured rem is worth in pixels, isRecord, formatPercent, formatFixed, formatBytes and the unit formatters including lengthUnit, formatMonthDay, and the SI
   converters with CUBIC_METERS_TO_US_GALLONS and JOULES_PER_KWH, cleanBoundedText (trim and REJECT an
   oversized provider string, the validators' form; $shared/signalk's cleanTruncatedText is the
   clip-instead form the resource decoders use), createBusyGate (one busy flag serializing a

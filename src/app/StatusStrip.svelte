@@ -26,6 +26,7 @@ import {
   lengthUnit,
   NARROW_QUERY,
   type ReactiveClock,
+  rootFontPx,
   speedUnit,
   Toast,
 } from '$shared/lib';
@@ -35,7 +36,7 @@ import { observeClientHeight, TransientNote } from '$shared/ui';
 import { readoutBudget } from './readout-budget';
 import StatusCell from './StatusCell.svelte';
 import { type SidewaysRoom, tilesBeside } from './sideways-row';
-import { buildStatusNotices } from './status-notices';
+import { buildStatusNotices, ORIENTATION_RESUMES } from './status-notices';
 
 let {
   connectionLabel,
@@ -197,7 +198,6 @@ const connTitle = $derived(connectionTitle || connectionLabel);
 function explainOrientation(): void {
   if (orientation) chipNote.show(`${orientation.label}. ${ORIENTATION_RESUMES}`, CHIP_NOTE_MS);
 }
-const ORIENTATION_RESUMES = 'The chosen rotation resumes when its data returns.';
 const aisTitle = $derived.by(() => {
   if (aisUnassessed === 0) return 'AIS targets being watched for collision risk';
   const cause = aisOwnFixLost
@@ -228,7 +228,7 @@ const slim = $derived(landscapeShort.matches || barRem < SLIM_BAR_COLUMNS * cell
 
 function measure(): void {
   if (!footer || !grid || !readouts) return;
-  const root = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const root = rootFontPx();
   // The content box, as the container queries see it.
   const style = getComputedStyle(footer);
   const content =
@@ -270,22 +270,24 @@ function measure(): void {
   readoutColumns = own.startsWith('subgrid') ? Math.max(0, tracks - 2) : tracks;
 }
 
+let measureFrame: number | undefined;
+function scheduleMeasure(): void {
+  if (measureFrame === undefined)
+    measureFrame = requestAnimationFrame(() => {
+      measureFrame = undefined;
+      measure();
+    });
+}
+
 onMount(() => {
-  let frame: number | undefined;
-  const schedule = (): void => {
-    if (frame === undefined)
-      frame = requestAnimationFrame(() => {
-        frame = undefined;
-        measure();
-      });
-  };
-  const observer = new ResizeObserver(schedule);
+  const observer = new ResizeObserver(scheduleMeasure);
   if (footer) observer.observe(footer);
   observer.observe(document.documentElement);
   measure();
   return () => {
     observer.disconnect();
-    if (frame !== undefined) cancelAnimationFrame(frame);
+    if (measureFrame !== undefined) cancelAnimationFrame(measureFrame);
+    measureFrame = undefined;
   };
 });
 
@@ -334,6 +336,14 @@ const sideways = $derived(
     sidewaysRoom !== undefined &&
     tilesBeside(sidewaysRoom, tileSpan, COMPACT_READOUTS + extras),
 );
+// A measure reads the layout it was taken in, so one that switches the ends between slim and full,
+// or the tiles between their sideways arrangements, is read again once that switch lands: the
+// bar's column count can change without the bar itself resizing.
+$effect(() => {
+  void slim;
+  void sideways;
+  scheduleMeasure();
+});
 const tilesOnColumns = $derived(
   !sideways && Number.isFinite(readoutColumns) && tileSpan > 0 && readoutColumns >= tileSpan,
 );

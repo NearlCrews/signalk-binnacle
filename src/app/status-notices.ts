@@ -104,6 +104,9 @@ export interface StatusNoticeInput {
 // A weather headline short enough for the cell names itself; a longer one says Weather.
 const WEATHER_WORD_MAX = 8;
 
+// Shared by the Status list's row and the Chart cell's tap note, so the two never disagree.
+export const ORIENTATION_RESUMES = 'The chosen rotation resumes when its data returns.';
+
 function button(label: string, run: (() => void) | undefined): NoticeAction | undefined {
   return run ? { kind: 'button', label, run } : undefined;
 }
@@ -304,7 +307,7 @@ export function buildStatusNotices(input: StatusNoticeInput): StatusNotice[] {
       icon: 'alert',
       word: 'North up',
       title: input.orientation.label,
-      detail: 'The chosen rotation resumes when its data returns.',
+      detail: ORIENTATION_RESUMES,
       action: button('Use north up', input.onResetOrientation),
     });
   }

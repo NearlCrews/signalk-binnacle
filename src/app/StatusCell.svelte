@@ -273,7 +273,7 @@ $effect(() => {
 :global(.status-list) {
   --menu-width: 22rem;
   transform-origin: left var(--anchored-origin-y, bottom);
-  max-block-size: calc(100 * var(--dvh) - var(--bar-block-size, 0px) - var(--space-4));
+  max-block-size: calc(var(--room-above-bar) - var(--space-4));
   overflow-y: auto;
 }
 .status-calm {

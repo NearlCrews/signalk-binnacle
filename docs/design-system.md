@@ -383,7 +383,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   focus stop at every size (`reading-order` keeps it there on the helm row). The bar measures its own
   height into `--bar-block-size` on the document root (zero while the phone instrument dock covers
   the whole screen), which every fixed surface uses to stay above the bar: the menu sheet, the
-  Forecast panel and the strips lifted over it, the sunset offer, and every menu's backdrop.
+  Forecast panel and the strips lifted over it, the sunset offer, and every menu's backdrop. A
+  surface's height cap composes from `--room-above-bar`, the room between the top cutout and the bar,
+  rather than spelling that out again.
   Four layouts, and a large-text variant of the stacked one:
   - Stacked by default: the ends take the first and last column the full height of the bar, the
     readouts flow through the columns between them as a subgrid (so every cell edge is a bar column

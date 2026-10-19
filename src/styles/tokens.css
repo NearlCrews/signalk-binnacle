@@ -65,14 +65,7 @@
   --weather-panel-height: min(
     calc(74 * var(--dvh)),
     36rem,
-    calc(
-      100 *
-      var(--dvh) -
-      var(--bar-block-size, 0px) -
-      var(--chrome-inset-top) -
-      2 *
-      var(--space-2)
-    )
+    calc(var(--room-above-bar) - 2 * var(--space-2))
   );
   /* The touch target for action controls (buttons, the strip pills, icon buttons). List rows read
      denser through tighter padding and type, not through a smaller target: see --row-size below. */
@@ -91,6 +84,9 @@
   /* The chart reaches the top edge of the screen, so every control floating at its top clears a
      status bar or cutout that overlays the page there. */
   --chrome-inset-top: env(safe-area-inset-top, 0px);
+  /* The room between that top inset and the status bar, whose height the shell publishes on this
+     root: the tallest a surface may be while it stands above the bar. */
+  --room-above-bar: calc(100 * var(--dvh) - var(--bar-block-size, 0px) - var(--chrome-inset-top));
   /* WCAG 2.5.5 sets 44px as the touch-target minimum, so list rows meet the same floor as the
      primary controls even though they read visually denser; kept equal to --control-size rather
      than its own value so the two cannot drift apart. */

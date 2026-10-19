@@ -267,13 +267,7 @@ function onCardFocusOut(event: FocusEvent): void {
   /* Fill the space above the bar so the grouped grid fits without a scrollbar on a normal screen,
      clear of any top cutout, with a small margin above and below. A short helm display still caps
      here and scrolls. */
-  max-block-size: calc(
-    100 *
-    var(--dvh) -
-    var(--bar-block-size, 0px) -
-    var(--chrome-inset-top) -
-    var(--space-6)
-  );
+  max-block-size: calc(var(--room-above-bar) - var(--space-6));
   padding: var(--space-3);
   /* The surface, border, radius, and shadow come from the shared .surface-elevated frame. */
 }
@@ -318,10 +312,7 @@ function onCardFocusOut(event: FocusEvent): void {
     transform-origin: bottom center;
     inline-size: 100dvw;
     max-inline-size: none;
-    max-block-size: min(
-      calc(80 * var(--dvh)),
-      calc(100 * var(--dvh) - var(--bar-block-size, 0px) - var(--chrome-inset-top))
-    );
+    max-block-size: min(calc(80 * var(--dvh)), var(--room-above-bar));
     padding-block-end: var(--space-3);
     padding-inline-start: calc(var(--space-3) + env(safe-area-inset-left, 0px));
     padding-inline-end: calc(var(--space-3) + env(safe-area-inset-right, 0px));

@@ -1,7 +1,13 @@
 <script lang="ts">
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import { onDestroy, onMount } from 'svelte';
-import { createMediaQuery, LANDSCAPE_SHORT_QUERY, NARROW_QUERY, Toast } from '$shared/lib';
+import {
+  createMediaQuery,
+  LANDSCAPE_SHORT_QUERY,
+  NARROW_QUERY,
+  rootFontPx,
+  Toast,
+} from '$shared/lib';
 import {
   AnchoredMenu,
   createMenuFocusMachine,
@@ -83,7 +89,7 @@ onMount(() => {
     // Sideways the capacity ignores the measurement; rotating back resizes the root and re-measures.
     if (landscapeShort.matches) return;
     const barStyle = getComputedStyle(element);
-    rootSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    rootSize = rootFontPx();
     // Computed control dimensions resolve inherited px, rem, and calc() tokens alike.
     const control = element.querySelector<HTMLElement>('.bar-tile');
     const controlSize = control ? Number.parseFloat(getComputedStyle(control).minBlockSize) : 0;
@@ -323,13 +329,7 @@ $effect(() => {
   transform-origin: right var(--anchored-origin-y, bottom);
   gap: var(--space-1);
   /* Above the bar it opens from, never over it: the room between the top inset and the bar. */
-  max-block-size: calc(
-    100 *
-    var(--dvh) -
-    var(--bar-block-size, 0px) -
-    var(--chrome-inset-top) -
-    1rem
-  );
+  max-block-size: calc(var(--room-above-bar) - 1rem);
   overflow-y: auto;
 }
 /* One strip row on a phone held sideways: the icon tiles sit at the trailing edge at their own

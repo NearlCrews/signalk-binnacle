@@ -34,8 +34,12 @@ const { controller }: Props = $props();
 .sunset-host {
   container: banner / inline-size;
   position: fixed;
-  /* Above the status bar, never over it: the bar holds MOB. */
-  inset-block-end: calc(var(--bar-block-size, 0px) + var(--space-3));
+  /* Above the status bar, never over it: the bar holds MOB. Over the phone instrument dock the
+     bar's height is zero, so the system bar's clearance holds the offer off the gesture area. */
+  inset-block-end: calc(
+    max(var(--bar-block-size, 0px), var(--system-bar-clearance, 0px)) +
+    var(--space-3)
+  );
   inset-inline: var(--chrome-inset-start) var(--chrome-inset-end);
   display: flex;
   justify-content: center;

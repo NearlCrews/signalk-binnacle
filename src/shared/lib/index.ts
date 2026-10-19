@@ -41,6 +41,7 @@ export {
   createRetryableLazyLoader,
   createRetryableLazyUiLoader,
 } from './retryable-lazy-loader';
+export { rootFontPx } from './root-font';
 export { createBusyGate } from './serialize-action';
 export {
   capitalize,

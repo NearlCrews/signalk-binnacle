@@ -805,6 +805,36 @@ test('the Status cell keeps its box when problems come and go', async ({ page, c
   await context.setOffline(false);
 });
 
+// Crossing into slim ends changes the bar's columns without resizing the bar, so the bar measures
+// again once the switch lands and ends up as a fresh load at that width would draw it.
+test('the bar settles as a fresh load would after its ends go slim', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'the measure order is engine-neutral; one engine pins it');
+  await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
+  await setRootFontSize(page, 150);
+  await stubVesselsSelf(page);
+  const grid = page.locator('.status-strip .strip-grid');
+  const arrangement = () =>
+    grid.evaluate((element) => {
+      const classes = [...element.classList].filter((name) => !name.startsWith('svelte-'));
+      return `${classes.sort().join(' ')} ${element.getAttribute('style') ?? ''}`;
+    });
+  await page.setViewportSize({ width: 1010, height: 800 });
+  await page.goto(FIXTURE_ORIGIN);
+  await waitForSignalKConnection(page);
+  await expect(grid).toHaveClass(/\bslim\b/);
+  const fresh = await arrangement();
+
+  await page.setViewportSize({ width: 1020, height: 800 });
+  await page.reload();
+  await waitForSignalKConnection(page);
+  await expect(grid).not.toHaveClass(/\bslim\b/);
+  await page.setViewportSize({ width: 1010, height: 800 });
+  await expect.poll(arrangement).toBe(fresh);
+});
+
 // A browser that focuses a pressed button moves focus onto it before the click, so a second tap on
 // the Status cell or the More tile has to close what it opened rather than close and reopen it.
 test('a second tap on the Status cell or the More tile closes what it opened', async ({ page }) => {
